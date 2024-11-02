@@ -4429,4 +4429,8 @@ $(document).ready(function () {
         // Call the async function to start processing posts
         processPosts();
     }
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> c2b4335140e8ad7a4c33af65d08438934c302850
