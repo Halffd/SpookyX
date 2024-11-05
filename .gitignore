@@ -1,0 +1,7 @@
+logs
+__pycache__
+search/__pycache__
+search/logs
+search/.cache
+.history
+.cache

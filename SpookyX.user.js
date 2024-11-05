@@ -63,7 +63,8 @@ const delay = (ms) => {
 function generatePost(postData) {
     // Create the main post element
     const postElement = document.createElement('article');
-    postElement.classList.add('doc_id_' + postData.doc_id, 'has_image');
+    const did = postData.doc_id ?? '0'
+    postElement.classList.add('doc_id_' + did, 'has_image');
     postElement.id = 'r' + postData.num;
     postElement.dataset.board = postData.board.shortname;
     postElement.dataset.docId = postData.doc_id;
@@ -340,6 +341,79 @@ const fetchThread = async (board, threadId) => {
     const data = { board, num: threadId };
     return fetchData(repliesUrl, data);
 };
+async function fetchRepliesWithRetry(aElem, retries = 350, wait = 1000) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            let replies = await fetchReplies(aElem); // Attempt to fetch replies
+            return replies; // Return the replies if successful
+        } catch (error) {
+            console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
+            if (attempt < retries - 1) {
+                await new Promise(resolve => setTimeout(resolve, wait)); // Wait before retrying
+            }
+        }
+    }
+    throw new Error(`Failed to fetch replies after ${retries} attempts`); // Throw an error if all retries fail
+}
+let processedPosts = 0; // Counter for processed posts
+// Function to process each post
+const processPost = async (post) => {
+    let id = post.id;
+    let rec = false;
+    if (id.charAt(0) === 'r') {
+        id = id.substring(1);
+        rec = true;
+    }
+    let $p = $(post); // Convert post (HTML element) to a jQuery object
+
+    // Style the OP post
+    if ($p.hasClass('post_is_op')) {
+        $p.css({
+            'border': '2px solid #AF3355', // AF Red color
+            'font-weight': (parseFloat($p.css('font-weight')) * 1.1) + 'em' // Increase font weight by 10%
+        });
+    }
+
+    // Find the first <a> element within the post controls
+    let aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
+    if (aElem.length === 0) return; // Skip if no anchor found
+
+    let href = aElem.get(0).href;
+    try {
+        // Use the retry function to fetch replies
+        let replies = await fetchRepliesWithRetry(aElem);
+        // Assuming replies is an array of post numbers
+        const repliesElems = replies.map(num => {
+            let board = $p.data('board') || '_';
+            let el = $(`<a href="https://desuarchive.org/${board}/post/${num}/" class="backlink" data-function="highlight" data-backlink="true" data-board="${board}" data-post="${num}">&gt;&gt;${num}</a>`);
+            return el[0]; // Return the DOM element
+        });
+
+        // Insert all the anchor elements into the first <a> element found in aElem
+        for (let r of repliesElems) {
+            aElem.get(0).parentNode.appendChild(r);
+        }
+
+        let postData = $(aElem).closest('.post_data'); // Corrected case sensitivity
+        if (postData.find('.backlink').length > 0) {
+            let backlinks = $('<div class="backlinks" style="font-size: 0.7em; padding: 2px;">Quoted By:</div>');
+            postData.after(backlinks);
+
+            postData.find('.backlink').each(function () {
+                backlinks.append($(this)); // Use jQuery's append method for each '.backlink'
+            });
+        }
+
+        console.log("Replies: ", replies, repliesElems);
+        console.log(id, href, $p, aElem); // Log info about the post
+
+        // Increment the processed posts counter
+        processedPosts++;
+    } catch (err) {
+        console.error(err)
+    }
+};
+
 if (GM_info === undefined) {
     var GM_info = { script: { version: '32.50' } };
 }
@@ -3879,6 +3953,7 @@ $(document).ready(function () {
                 }
             }, 100);
         }
+        processPost($(`#r${postID}`)[0])
     };
 
     var executeShortcut = function (shortcut) {
@@ -4318,21 +4393,40 @@ $(document).ready(function () {
                 });
             });
         });
-        // Check if the post starts with '#'
         if (pLast.charAt(0) === '#') {
-            let post = `#${pLast.substring(1)}`; // Construct the ID selector
-            // Select the element and scroll it into view
-            let targetElement = $(post)[0]; // Get the DOM element
 
+            let post = `#r${pLast.substring(1)}`; // Construct the ID selector
+            let targetElement = $(post)[0]; // Get the DOM element
             if (targetElement) {
-                targetElement.scrollIntoView();
-                targetElement.scrollIntoView({ behavior: 'instant' });
-                for (let i = 0; i < 5; i += 1) {
-                    setTimeout(() => {
-                        let targetElement = $(post)[0]; // Get the DOM element
-                        targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
-                    }, 100 * i)
-                }
+                const scrollToElement = () => {
+                    targetElement = $(post)[0]; // Get the DOM element
+                    targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+                };
+                scrollToElement()
+
+                // Start the interval to scroll the element into view every 500 milliseconds
+                const intervalId = setInterval(() => {
+                    //const rect = targetElement.getBoundingClientRect();
+                    //const isInView = rect.top >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight);
+
+                    // If the element is not in view, scroll to it
+                    //if (!isInView) {
+                    scrollToElement();
+                    //}
+                }, 200); // Adjust the interval time as needed
+
+                // Function to handle wheel events
+                const handleWheel = () => {
+                    clearInterval(intervalId);
+                    console.log("Scrolling stopped due to user interaction.");
+                    // Optionally, you can remove the event listener if you only want to stop once
+                    window.removeEventListener('wheel', handleWheel);
+                };
+
+                // Add the event listener for wheel events
+                window.addEventListener('wheel', handleWheel);
+            } else {
+                console.error("Element not found:", post);
             }
         }
     }
@@ -4341,96 +4435,28 @@ $(document).ready(function () {
             if (settings.UserSettings.fetching.value) {
                 if (search) {
                     let posts = document.querySelectorAll('article.post'); // Get all posts
+                    let totalPosts = posts.length;
 
-                    // Function to process each post
-                    const processPost = async (post) => {
-                        let id = post.id;
-                        let rec = false;
-                        if (id.substring(0, 1) === 'r') {
-                            id = id.substring(1);
-                            rec = true;
-                        }
-                        let $p = $(post); // Convert post (HTML element) to a jQuery object
-
-                        // Style the OP post
-                        if ($p.hasClass('post_is_op')) {
-                            $p.css({
-                                'border': '2px solid #AF3355', // AF Red color
-                                'font-weight': (parseFloat($p.css('font-weight')) * 1.1) + 'em' // Increase font weight by 10%
-                            });
-                        }
-
-                        // Find the first <a> element within the post controls
-                        let aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
-                        if (aElem.length === 0) return; // Skip if no anchor found
-
-                        let href = aElem.get(0).href;
-                        let replies = await fetchReplies(aElem); // Fetch replies for the anchor
-                        // Assuming replies is an array of post numbers
-                        const repliesElems = replies.map(num => {
-                            // Create the anchor element using jQuery directly
-                            let board = $p.data('board') || '_';
-                            let el = $(`<a href="https://desuarchive.org/${board}/post/${num}/" class="backlink" data-function="highlight" data-backlink="true" data-board="${board}" data-post="${num}">&gt;&gt;${num}</a>`);
-
-                            // Capture the context of $this (assuming $this is defined in the outer scope)
-                            el.click(async (event) => {
-                                let i = num; // Ensure $this is scoped correctly
-                                let targetElem = event.currentTarget; // Get the target element that was clicked
-                                let art = $(targetElem).closest('article');
-                                let text = art.find('.text');
-
-                                // Check if an inline element with this ID already exists, and remove it if found
-                                let existingElem = art.find(`.inline.sub${num}`);
-                                if (existingElem.length > 0) {
-                                    existingElem.remove(); // Remove any existing element with the same ID
-                                }
-
-                                // Prevent duplicate insertion by checking and removing existing inline elements
-                                let elem = await fetchPostElem(i);
-                                let inl = $(`<div class="inline sub${num}" id="${num}"></div>`);
-                                inl.prepend(elem); // Prepend the fetched post element
-                                text.prepend(inl); // Prepend the inline element to text
-                                await processPost(elem[0]);
-                                art.find('header .inline').remove()
-                            });
-
-                            return el[0]; // Return the DOM element
-                        });
-
-                        // Insert all the anchor elements into the first <a> element found in aElem
-                        for (let r of repliesElems) {
-                            aElem.get(0).parentNode.appendChild(r);
-                        }
-                        let postData = $(aElem).closest('.post_data'); // Corrected case sensitivity
-                        if (postData.find('.backlink').length > 0) {
-                            let backlinks = $('<div class="backlinks" style="font-size: 0.7em; padding: 2px;">Quoted By:</div>'); // Create the backlink list div
-
-                            // Append the backlinks div right after postData
-                            postData.after(backlinks);
-
-                            // Find each '.backlink' element inside postData and append it to the new backlinks div
-                            postData.find('.backlink').each(function () {
-                                backlinks.append($(this)); // Use jQuery's append method for each '.backlink'
-                            });
-                        }
-                        console.log("Replies: ", replies, repliesElems);
-                        console.log(id, href, $p, aElem); // Log info about the post
-                    };
+                    const url = document.URL;
+                    const wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
 
                     // Sequentially process each post with a delay
-                    for (let i = 0; i < posts.length; i++) {
+                    for (let i = 0; i < totalPosts; i++) {
                         await processPost(posts[i]); // Process each post
-                        await delay(50); // Delay between each request to avoid too many requests
+                        await delay(wait); // Delay between each request to avoid too many requests
+                    }
+
+                    // Repeat until all posts are processed
+                    if (processedPosts < totalPosts) {
+                        console.log("Not all posts processed, retrying...");
+                        await processPosts(); // Call recursively until done
+                    } else {
+                        console.log("All posts processed successfully.");
                     }
                 }
             }
         }
-
         // Call the async function to start processing posts
         processPosts();
     }
-<<<<<<< HEAD
 });
-=======
-});
->>>>>>> c2b4335140e8ad7a4c33af65d08438934c302850
