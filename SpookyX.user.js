@@ -201,29 +201,34 @@ function generatePost(postData) {
 }
 const generatePostElem = async (postData) => {
     var postElement = generatePost(postData);
-
-    // Add debugging to check if postData has media
+    
     console.log("generatePostElem - postData:", postData);
-
+    
     // Check if postData and media exist before trying to access them
     if (postData && postData.media && postData.media.media_link) {
         try {
             console.log("Attempting to load image from:", postData.media.media_link);
-
+            
             // Create the image element directly without trying to fetch via proxy
-            var imageElement = $('<img>').attr('src', postData.media.media_link).css({
-                'width': '500px',
-                'height': '500px'
-            }).addClass('post-image');
-
+            var imageElement = $('<img>')
+                .attr('src', postData.media.media_link)
+                .css({
+                    'width': 'auto',
+                    'max-width': '100%',
+                    'height': 'auto',
+                    'max-height': '500px',
+                    'display': 'block'
+                })
+                .addClass('post-image');
+            
             // Add error handling for the image
             imageElement.on('error', function() {
                 console.error('Image failed to load:', postData.media.media_link);
-
+                
                 // Try alternative URLs if the original fails
                 const originalSrc = postData.media.media_link;
                 let newSrc = originalSrc;
-
+                
                 // Try different domain variations
                 if (originalSrc.includes('arch-img.b4k.dev')) {
                     newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -232,25 +237,153 @@ const generatePostElem = async (postData) => {
                 } else if (originalSrc.includes('is.4chan.org')) {
                     newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
                 }
-
+                
                 if (newSrc !== originalSrc) {
                     console.log('Trying alternative image source:', newSrc);
                     $(this).attr('src', newSrc);
                 }
             });
-
+            
             // Add the image container and image
             let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
             postElement.find('.thread_image_box').prepend(imageElement);
-
+            
+            console.log("Image element added to post:", imageElement);
+        } catch (error) {
+            console.error('Error creating image element:', error);
+        }
+    } else if (postData && postData.media_link) {
+        // Handle case where media_link is directly on postData (different structure)
+        try {
+            console.log("Attempting to load image from direct media_link:", postData.media_link);
+            
+            var imageElement = $('<img>')
+                .attr('src', postData.media_link)
+                .css({
+                    'width': 'auto',
+                    'max-width': '100%',
+                    'height': 'auto',
+                    'max-height': '500px',
+                    'display': 'block'
+                })
+                .addClass('post-image');
+            
+            // Add error handling for the image
+            imageElement.on('error', function() {
+                console.error('Image failed to load:', postData.media_link);
+                
+                // Try alternative URLs if the original fails
+                const originalSrc = postData.media_link;
+                let newSrc = originalSrc;
+                
+                // Try different domain variations
+                if (originalSrc.includes('arch-img.b4k.dev')) {
+                    newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                } else if (originalSrc.includes('is2.4chan.org')) {
+                    newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                } else if (originalSrc.includes('is.4chan.org')) {
+                    newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                }
+                
+                if (newSrc !== originalSrc) {
+                    console.log('Trying alternative image source:', newSrc);
+                    $(this).attr('src', newSrc);
+                }
+            });
+            
+            // Add the image container and image
+            let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
+            postElement.find('.thread_image_box').prepend(imageElement);
+            
+            console.log("Image element added to post:", imageElement);
+        } catch (error) {
+            console.error('Error creating image element:', error);
+        }
+    } else if (postData && postData.image_src) {
+        // Handle case where image_src is directly on postData (different structure)
+        try {
+            console.log("Attempting to load image from image_src:", postData.image_src);
+            
+            var imageElement = $('<img>')
+                .attr('src', postData.image_src)
+                .css({
+                    'width': 'auto',
+                    'max-width': '100%',
+                    'height': 'auto',
+                    'max-height': '500px',
+                    'display': 'block'
+                })
+                .addClass('post-image');
+            
+            // Add error handling for the image
+            imageElement.on('error', function() {
+                console.error('Image failed to load:', postData.image_src);
+                
+                // Try alternative URLs if the original fails
+                const originalSrc = postData.image_src;
+                let newSrc = originalSrc;
+                
+                // Try different domain variations
+                if (originalSrc.includes('arch-img.b4k.dev')) {
+                    newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                } else if (originalSrc.includes('is2.4chan.org')) {
+                    newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                } else if (originalSrc.includes('is.4chan.org')) {
+                    newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                }
+                
+                if (newSrc !== originalSrc) {
+                    console.log('Trying alternative image source:', newSrc);
+                    $(this).attr('src', newSrc);
+                }
+            });
+            
+            // Add the image container and image
+            let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
+            postElement.find('.thread_image_box').prepend(imageElement);
+            
             console.log("Image element added to post:", imageElement);
         } catch (error) {
             console.error('Error creating image element:', error);
         }
     } else {
-        console.warn("Post data missing media information:", postData);
+        // Check if there's an image in the HTML structure already
+        console.log("No media information in postData, checking for existing images");
+        
+        // Look for existing images in the post HTML
+        const existingImages = postElement.find('img.post_image, img.smallImage, img.thread_image');
+        if (existingImages.length > 0) {
+            console.log("Found existing images in post HTML:", existingImages.length);
+            
+            // Clone the first image and add it to the thread_image_box
+            const firstImage = existingImages.first();
+            const imageSrc = firstImage.attr('src') || firstImage.data('src');
+            
+            if (imageSrc) {
+                console.log("Using existing image source:", imageSrc);
+                
+                var imageElement = $('<img>')
+                    .attr('src', imageSrc)
+                    .css({
+                        'width': 'auto',
+                        'max-width': '100%',
+                        'height': 'auto',
+                        'max-height': '500px',
+                        'display': 'block'
+                    })
+                    .addClass('post-image');
+                
+                // Add the image container and image
+                let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
+                postElement.find('.thread_image_box').prepend(imageElement);
+                
+                console.log("Existing image added to post:", imageElement);
+            }
+        } else {
+            console.warn("No image found in post data or HTML");
+        }
     }
-
+    
     return postElement;
 }
 var ops = []
@@ -258,13 +391,75 @@ var opsId = []
 var postsObj = {}
 // Function to get operation by opsId
 const fetchOp = async (id) => {
+    console.log("fetchOp called with id:", id);
+    
     // Create an object to map opsId to ops
     const opsMap = opsId.reduce((acc, id, index) => {
         acc[id] = ops[index];
         return acc;
     }, {});
-
-    return await generatePostElem(opsMap[id]) || '';
+    
+    // Get the OP data
+    const opData = opsMap[id];
+    console.log("OP data found:", opData);
+    
+    // If we're on a search page, we might need to extract the image from the DOM
+    if (search && (!opData || !opData.media)) {
+        console.log("On search page, trying to extract image from DOM");
+        
+        // Try to find the post in the DOM
+        const postElement = $(`#${id}`);
+        if (postElement.length > 0) {
+            console.log("Found post element in DOM:", postElement);
+            
+            // Look for images in the post
+            const images = postElement.find('img.post_image, img.smallImage, img.thread_image');
+            if (images.length > 0) {
+                console.log("Found images in post:", images.length);
+                
+                // Get the first image source
+                const firstImage = images.first();
+                const imageSrc = firstImage.attr('src') || firstImage.data('src');
+                
+                if (imageSrc) {
+                    console.log("Found image source:", imageSrc);
+                    
+                    // If we have opData, add the image to it
+                    if (opData) {
+                        if (!opData.media) {
+                            opData.media = {};
+                        }
+                        opData.media.media_link = imageSrc;
+                    } else {
+                        // Create a minimal opData with the image
+                        const newOpData = {
+                            media_link: imageSrc,
+                            // Add other necessary properties from the DOM
+                            board: { shortname: postElement.data('board') || 'v' },
+                            thread_num: postElement.data('thread-num') || '0',
+                            num: id
+                        };
+                        
+                        // Add the text content if available
+                        const textElement = postElement.find('.text');
+                        if (textElement.length > 0) {
+                            newOpData.comment_processed = textElement.html();
+                        }
+                        
+                        return await generatePostElem(newOpData);
+                    }
+                }
+            }
+        }
+    }
+    
+    // If we have opData, generate the post element
+    if (opData) {
+        return await generatePostElem(opData);
+    }
+    
+    console.warn("No OP data found for id:", id);
+    return '';
 };
 const fetchPostElem = async (id) => {
     return await generatePostElem(postsObj[id]) || '';
