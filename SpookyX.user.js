@@ -4934,4 +4934,205 @@ function fixImageLoading() {
 // Call the image fix function when the document is ready
 $(function() {
     fixImageLoading();
+    
+    // Also periodically check for new images that might need fixing
+    setInterval(function() {
+        $('img.post_image:not(.error-checked)').each(function() {
+            const img = $(this);
+            img.addClass('error-checked');
+            
+            // If the image is already in an error state, try to fix it
+            if (img[0].naturalWidth === 0 && img[0].naturalHeight === 0 && !img[0].complete) {
+                img.trigger('error');
+            }
+        });
+    }, 2000);
+});
+
+// Enhanced image loading fix to handle CORS issues
+function fixImageLoading() {
+    // Apply to all images, both existing and future ones
+    $(document).on('error', 'img.post_image', function() {
+        const img = $(this);
+        const src = img.attr('src');
+        
+        if (!src) return;
+        
+        console.log(`Image failed to load: ${src}`);
+        img.addClass('error-placeholder');
+        
+        // Try different approaches to load the image
+        if (src.includes('arch-img.b4k.dev')) {
+            // Approach 1: Try the b4k.co domain instead
+            const newSrc1 = src.replace('arch-img.b4k.dev', 'b4k.co/media');
+            console.log(`Trying alternative source: ${newSrc1}`);
+            
+            // Create a test image to see if this source works
+            const testImg1 = new Image();
+            testImg1.onload = function() {
+                console.log(`Success with: ${newSrc1}`);
+                img.attr('src', newSrc1);
+                img.removeClass('error-placeholder');
+            };
+            testImg1.onerror = function() {
+                // Approach 2: Try using the thumbnail instead of full image
+                if (src.includes('.jpg') && !src.includes('s.jpg')) {
+                    const thumbSrc = src.replace('.jpg', 's.jpg');
+                    console.log(`Trying thumbnail: ${thumbSrc}`);
+                    img.attr('src', thumbSrc);
+                }
+                // Approach 3: Try using a data URL placeholder
+                else {
+                    console.log("Using placeholder image");
+                    img.attr('src', 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 300 200%22%3E%3Crect width%3D%22300%22 height%3D%22200%22 fill%3D%22%23cccccc%22%3E%3C%2Frect%3E%3Ctext x%3D%22150%22 y%3D%22100%22 font-size%3D%2220%22 text-anchor%3D%22middle%22 alignment-baseline%3D%22middle%22 fill%3D%22%23333333%22%3EImage Failed to Load%3C%2Ftext%3E%3C%2Fsvg%3E');
+                    
+                    // Add a click handler to try loading the image again
+                    img.css('cursor', 'pointer');
+                    img.attr('title', 'Click to try loading the image again');
+                    img.off('click').on('click', function() {
+                        window.open(src, '_blank');
+                    });
+                }
+            };
+            testImg1.src = newSrc1;
+        }
+    });
+    
+    // Fix for CORS issues in the fetchOp function
+    const originalFetchOp = window.fetchOp || function() {};
+    window.fetchOp = function(aElem) {
+        // Check if we're using CORS-anywhere
+        if (typeof originalFetchOp === 'function') {
+            try {
+                // Modify any URLs in the function to avoid CORS-anywhere
+                const result = originalFetchOp.apply(this, arguments);
+                
+                // If it's a promise, intercept the result
+                if (result && typeof result.then === 'function') {
+                    return result.then(function(data) {
+                        // Process the data to fix any image URLs
+                        if (data && data.html) {
+                            data.html = data.html.replace(/cors-anywhere\.herokuapp\.com\//g, '');
+                        }
+                        return data;
+                    });
+                }
+                
+                return result;
+            } catch (e) {
+                console.error("Error in fetchOp:", e);
+                return Promise.reject(e);
+            }
+        }
+    };
+    
+    // Override any functions that might be using CORS-anywhere
+    const originalAjax = $.ajax;
+    $.ajax = function(options) {
+        if (options && options.url) {
+            // Remove CORS-anywhere from URLs
+            if (options.url.includes('cors-anywhere.herokuapp.com')) {
+                options.url = options.url.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
+                console.log("Removed CORS-anywhere from URL:", options.url);
+                
+                // Add crossOrigin attribute if it's an image request
+                if (options.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                    options.crossDomain = true;
+                    options.xhrFields = options.xhrFields || {};
+                    options.xhrFields.crossOrigin = "anonymous";
+                }
+            }
+        }
+        return originalAjax.apply(this, arguments);
+    };
+    
+    // Also add a function to preload images with proper CORS handling
+    window.preloadImage = function(url, callback) {
+        if (!url) {
+            if (callback) callback(false);
+            return;
+        }
+        
+        // Remove CORS-anywhere if present
+        url = url.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
+        
+        // Try to load the image
+        const img = new Image();
+        img.crossOrigin = "anonymous"; // Try to avoid CORS issues
+        img.onload = function() {
+            if (callback) callback(true, img);
+        };
+        img.onerror = function() {
+            // Try alternative sources
+            const alt1 = url.replace('arch-img.b4k.dev', 'b4k.co/media');
+            const altImg = new Image();
+            altImg.crossOrigin = "anonymous";
+            altImg.onload = function() {
+                if (callback) callback(true, altImg, alt1);
+            };
+            altImg.onerror = function() {
+                if (callback) callback(false);
+            };
+            altImg.src = alt1;
+        };
+        img.src = url;
+    };
+    
+    // Enhance the inlineImages function if it exists
+    if (typeof inlineImages === 'function') {
+        const originalInlineImages = inlineImages;
+        window.inlineImages = function(container) {
+            // Call the original function
+            originalInlineImages(container);
+            
+            // Then enhance the images
+            $(container).find('img.post_image').each(function() {
+                const img = $(this);
+                const src = img.data('src') || img.attr('src');
+                
+                if (!src) return;
+                
+                // Remove CORS-anywhere if present
+                if (src.includes('cors-anywhere.herokuapp.com')) {
+                    const newSrc = src.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
+                    img.attr('src', newSrc);
+                    if (img.data('src')) {
+                        img.data('src', newSrc);
+                    }
+                }
+                
+                // If using data-src (lazy loading), set the src attribute
+                if (img.data('src') && !img.attr('src')) {
+                    img.attr('src', img.data('src'));
+                }
+                
+                // Add click handler to open image in new tab if it fails
+                img.off('click.errorFix').on('click.errorFix', function(e) {
+                    if (img.hasClass('error-placeholder')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.open(src, '_blank');
+                    }
+                });
+            });
+        };
+    }
+}
+
+// Call the image fix function when the document is ready
+$(function() {
+    fixImageLoading();
+    
+    // Also periodically check for new images that might need fixing
+    setInterval(function() {
+        $('img.post_image:not(.error-checked)').each(function() {
+            const img = $(this);
+            img.addClass('error-checked');
+            
+            // If the image is already in an error state, try to fix it
+            if (img[0].naturalWidth === 0 && img[0].naturalHeight === 0 && !img[0].complete) {
+                img.trigger('error');
+            }
+        });
+    }, 2000);
 });
