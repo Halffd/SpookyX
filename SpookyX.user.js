@@ -201,27 +201,56 @@ function generatePost(postData) {
 }
 const generatePostElem = async (postData) => {
     var postElement = generatePost(postData);
-    const proxyUrl = 'https://cors-anywhere.herokuapp.com/'; // Use a valid CORS proxy
-
-    try {
-        await $.ajax({
-            url: proxyUrl + postData.media.media_link,
-            type: 'GET',
-            success: function (data) {
-                var imageElement = $('<img>').attr('src', postData.media.media_link).css(
-                    {
-                        'width': '500px',
-                        'height': '500px'
-                    }).addClass('post-image');
-                let cont = postElement.find('.text').before('<div class="thread_image_box"></div>')
-                postElement.find('.thread_image_box').prepend(imageElement);
-                $('#post-container').html(postElement);
-            },
-            error: function (xhr, status, error) {
-                console.error('Error fetching image:', error);
-            }
-        });
-    } catch { }
+    
+    // Add debugging to check if postData has media
+    console.log("generatePostElem - postData:", postData);
+    
+    // Check if postData and media exist before trying to access them
+    if (postData && postData.media && postData.media.media_link) {
+        try {
+            console.log("Attempting to load image from:", postData.media.media_link);
+            
+            // Create the image element directly without trying to fetch via proxy
+            var imageElement = $('<img>').attr('src', postData.media.media_link).css({
+                'width': '500px',
+                'height': '500px'
+            }).addClass('post-image');
+            
+            // Add error handling for the image
+            imageElement.on('error', function() {
+                console.error('Image failed to load:', postData.media.media_link);
+                
+                // Try alternative URLs if the original fails
+                const originalSrc = postData.media.media_link;
+                let newSrc = originalSrc;
+                
+                // Try different domain variations
+                if (originalSrc.includes('arch-img.b4k.dev')) {
+                    newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                } else if (originalSrc.includes('is2.4chan.org')) {
+                    newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                } else if (originalSrc.includes('is.4chan.org')) {
+                    newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                }
+                
+                if (newSrc !== originalSrc) {
+                    console.log('Trying alternative image source:', newSrc);
+                    $(this).attr('src', newSrc);
+                }
+            });
+            
+            // Add the image container and image
+            let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
+            postElement.find('.thread_image_box').prepend(imageElement);
+            
+            console.log("Image element added to post:", imageElement);
+        } catch (error) {
+            console.error('Error creating image element:', error);
+        }
+    } else {
+        console.warn("Post data missing media information:", postData);
+    }
+    
     return postElement;
 }
 var ops = []
@@ -242,22 +271,57 @@ const fetchPostElem = async (id) => {
 };
 // Generic AJAX request function
 const fetchData = async (url, data) => {
-    try {
-        const result = await jQuery.ajax({
-            url,
-            type: 'GET',
-            data,
-            dataType: 'json'
-        });
+    const maxRetries = 3;
+    let retryCount = 0;
+    let retryDelay = 2000; // Start with 2 seconds delay
+    
+    while (retryCount < maxRetries) {
+        try {
+            const result = await jQuery.ajax({
+                url,
+                type: 'GET',
+                data,
+                dataType: 'json',
+                timeout: 15000, // 15 second timeout
+                beforeSend: function(xhr) {
+                    // Add headers that might help prevent 403 errors
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    
+                    // Set a proper referer if possible
+                    const currentUrl = window.location.href;
+                    if (currentUrl) {
+                        xhr.setRequestHeader('Referer', currentUrl);
+                    }
+                }
+            });
 
-        if (result.error) {
-            throw new Error(result.error);
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            return result; // Assuming result is the desired response
+        } catch (error) {
+            // Check if it's a 403 error or other network error that might benefit from retrying
+            if (error.status === 403 || error.status === 429 || error.status === 0) {
+                retryCount++;
+                
+                if (retryCount < maxRetries) {
+                    console.warn(`Received ${error.status} error. Retrying (${retryCount}/${maxRetries}) after ${retryDelay}ms...`);
+                    
+                    // Wait before retrying
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    
+                    // Exponential backoff - double the delay for next retry
+                    retryDelay *= 2;
+                } else {
+                    console.error('Max retries reached. Giving up.', error);
+                    throw error;
+                }
+            } else {
+                console.error('Error fetching data:', error);
+                throw error;
+            }
         }
-
-        return result; // Assuming result is the desired response
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        throw error;
     }
 };
 
@@ -343,19 +407,36 @@ const fetchThread = async (board, threadId) => {
     const data = { board, num: threadId };
     return fetchData(repliesUrl, data);
 };
-async function fetchRepliesWithRetry(aElem, retries = 350, wait = 1000) {
+async function fetchRepliesWithRetry(aElem, retries = 3, wait = 2000) {
+    let lastError = null;
+    let exponentialWait = wait;
+    
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
             let replies = await fetchReplies(aElem); // Attempt to fetch replies
             return replies; // Return the replies if successful
         } catch (error) {
+            lastError = error;
             console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
+            
+            // If it's a 403 error, we might need a longer wait
+            if (error.status === 403 || error.status === 429) {
+                console.warn(`Received ${error.status} error. Using longer delay.`);
+                exponentialWait *= 2; // Double the wait time for rate limit errors
+            }
+            
             if (attempt < retries - 1) {
-                await new Promise(resolve => setTimeout(resolve, wait)); // Wait before retrying
+                console.log(`Waiting ${exponentialWait}ms before retry ${attempt + 2}...`);
+                await new Promise(resolve => setTimeout(resolve, exponentialWait)); // Wait before retrying
             }
         }
     }
-    throw new Error(`Failed to fetch replies after ${retries} attempts`); // Throw an error if all retries fail
+    
+    // If we get here, all retries failed
+    console.error(`Failed to fetch replies after ${retries} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
+    
+    // Return an empty array instead of throwing to prevent breaking the UI
+    return [];
 }
 let processedPosts = 0; // Counter for processed posts
 // Function to process each post
@@ -1690,12 +1771,36 @@ function delayedLoad(posts) {
 }
 
 function inlineImages(posts) {
+    console.log("inlineImages called with:", posts);
+    
+    // If posts is not a jQuery object, convert it
+    if (!(posts instanceof jQuery)) {
+        posts = $(posts);
+    }
+    
+    // Log how many posts we're processing
+    console.log(`Processing ${posts.length} posts for inline images`);
+    
     posts.each(function (i, post) {
         var $post = $(post);
-        ($post.hasClass('thread') ? $post.children('.thread_image_box') : $post.find('.thread_image_box')).each(function (i, currentImage) {
+        console.log(`Processing post ${i}:`, $post);
+        
+        // Find all thread_image_box elements in this post
+        var $imageBoxes = $post.hasClass('thread') ? 
+            $post.children('.thread_image_box') : 
+            $post.find('.thread_image_box');
+        
+        console.log(`Found ${$imageBoxes.length} image boxes in post ${i}`);
+        
+        $imageBoxes.each(function (j, currentImage) {
             var $currentImage = $(currentImage);
-            $currentImage.find('>a').each(function (j, imgLink) {
+            console.log(`Processing image box ${j} in post ${i}:`, $currentImage);
+            
+            // Process links in the image box
+            $currentImage.find('>a').each(function (k, imgLink) {
                 var fullImage = imgLink.href;
+                console.log(`Processing image link ${k} with href: ${fullImage}`);
+                
                 if (settings.UserSettings.inlineImages.suboptions.processSpoiler.value && $currentImage.find('.spoiler_box').length) {
                     $(imgLink).html('<div class="spoilerText">Spoiler</div><img class="smallImage spoilerImage">');
                     var $image = $currentImage.find('img');
@@ -1703,6 +1808,7 @@ function inlineImages(posts) {
                         $currentImage.find(".spoilerText").css({ "top": (e.target.height / 2) - 6.5 }); // Center spoiler text
                     });
                 }
+                
                 if (/\.webm$/i.test(fullImage)) { // Handle post webms
                     if (settings.UserSettings.inlineImages.suboptions.inlineVideos.value) {
                         $currentImage.prepend('<video width="' + ($(post).hasClass('thread') ? imageWidthOP : imageWidth) + '" name="media" loop muted ' + autoplayVid + '><source src="' + fullImage + '" type="video/webm"></video>');
@@ -1710,26 +1816,61 @@ function inlineImages(posts) {
                         addHover($currentImage);
                     }
                 } else if (!/\.(pdf|swf)$/i.test(fullImage)) {
-                    $currentImage.find('img').each(function (k, image) {
+                    $currentImage.find('img').each(function (l, image) {
                         var $image = $(image);
                         var thumbImage = $(image).attr('src');
+                        
+                        console.log(`Setting image src to: ${fullImage}`);
                         $image.attr('src', fullImage);
+                        
                         $image.error(function () { // Handle images that won't load
+                            console.error(`Image failed to load: ${fullImage}`);
+                            
                             if (!$image.data('tried4pleb')) {
                                 $image.data('tried4pleb', true);
-                                var imgLink4pleb = fullImage.replace('data.archive.moe/board', 'img.4plebs.org/boards');
-                                $image.attr('src', imgLink4pleb);
-                                $image.parent().attr('href', imgLink4pleb); // Change link
-                            } else if (!$image.data('triedThumb')) {
-                                $image.data('triedThumb', true);
-                                if (fullImage !== thumbImage) { // If the image has a thumbnail aka was 4chan native then use that
+                                
+                                // Try alternative URLs if the original fails
+                                let newSrc = fullImage;
+                                
+                                // Try different domain variations
+                                if (fullImage.includes('arch-img.b4k.dev')) {
+                                    newSrc = fullImage.replace('arch-img.b4k.dev', 'b4k.co/media');
+                                } else if (fullImage.includes('is2.4chan.org')) {
+                                    newSrc = fullImage.replace('is2.4chan.org', 'i.4cdn.org');
+                                } else if (fullImage.includes('is.4chan.org')) {
+                                    newSrc = fullImage.replace('is.4chan.org', 'i.4cdn.org');
+                                }
+                                
+                                if (newSrc !== fullImage) {
+                                    console.log(`Trying alternative image source: ${newSrc}`);
+                                    $image.attr('src', newSrc);
+                                } else {
+                                    // If no alternative URL, revert to thumbnail
+                                    console.log(`Reverting to thumbnail: ${thumbImage}`);
                                     $image.attr('src', thumbImage);
-                                    $image.parent().attr('href', fullImage); // Reset link if changed to 4pleb attempt
                                 }
                             }
                         });
-                        addHover($currentImage);
                     });
+                }
+            });
+            
+            // Also check for post-image class which might be added by generatePostElem
+            $currentImage.find('img.post-image').each(function(m, image) {
+                console.log("Found post-image:", image);
+                var $image = $(image);
+                
+                // Make sure the image is visible and properly sized
+                $image.css({
+                    'display': 'block',
+                    'max-width': '100%',
+                    'height': 'auto'
+                });
+                
+                // Add hover functionality if needed
+                if (settings.UserSettings.inlineImages.suboptions.imageHover && 
+                    settings.UserSettings.inlineImages.suboptions.imageHover.value) {
+                    addHover($image);
                 }
             });
         });
@@ -4403,9 +4544,12 @@ $(document).ready(function () {
                 }
                 
                 $button.click(async function () {
+                    console.log("OP button clicked");
                     let opElem = $(getOp()[1]).clone();
                     if (search) {
-                        opElem = await fetchOp($this.closest('article.post')[0].id)
+                        console.log("Fetching OP for search result:", $this.closest('article.post')[0].id);
+                        opElem = await fetchOp($this.closest('article.post')[0].id);
+                        console.log("Fetched OP element:", opElem);
                     }
                     opElem.find('aside, #reply, .thread_tools_bottom, .js_hook_realtimethread').remove();
                     
@@ -4414,33 +4558,74 @@ $(document).ready(function () {
 
                     // Set the border style
                     opElem.css('border', '2px solid #773311');
+                    
+                    // Find the parent element
                     let parent = $this.parent();
-                    let $inlineOp = parent.next('.inline-op')[0]; // Get the DOM element for direct manipulation
+                    let $inlineOp = parent.next('.inline-op');
 
-                    if (!$inlineOp) {
+                    if (!$inlineOp.length) {
+                        console.log("Creating new inline-op element");
                         // Create the new inline-op element
-                        let newInlineOp = $('<div class="inline-op"></div>')[0]; // Create a jQuery object and get the DOM element
-                        parent.after(newInlineOp); // Insert the new element after the parent
+                        let newInlineOp = $('<div class="inline-op"></div>')[0];
+                        parent.after(newInlineOp);
 
                         // If opElem is a jQuery object, convert it to a DOM element
                         if (opElem instanceof jQuery) {
-                            newInlineOp.appendChild(opElem[0]); // Append the first DOM element of the jQuery object
+                            console.log("Appending jQuery opElem to newInlineOp");
+                            newInlineOp.appendChild(opElem[0]);
                             
-                            // Process images in the cloned OP post
+                            // Process images in the cloned OP post - use a more direct selector
                             setTimeout(() => {
-                                inlineImages($(newInlineOp).find('article'));
+                                console.log("Processing images in opElem");
+                                // First try to process the entire inline-op element
+                                let $inlineOpElement = $(newInlineOp);
+                                
+                                // Log what we're processing
+                                console.log("Processing images in:", $inlineOpElement);
+                                console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
+                                
+                                // Process images directly on the opElem first
+                                inlineImages(opElem);
+                                
+                                // Then process the entire inline-op element
+                                inlineImages($inlineOpElement);
+                                
+                                // If we need to handle gifs that should be paused
+                                if (settings.UserSettings.inlineImages && 
+                                    settings.UserSettings.inlineImages.suboptions && 
+                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs && 
+                                    !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+                                    pauseGifs($inlineOpElement.find('img'));
+                                }
                             }, 100);
                         } else {
-                            newInlineOp.innerHTML += opElem; // If opElem is a string, append it directly
+                            console.log("Appending HTML string opElem to newInlineOp");
+                            newInlineOp.innerHTML += opElem;
                             
                             // Process images in the HTML string case
                             setTimeout(() => {
-                                inlineImages($(newInlineOp).children());
+                                console.log("Processing images in HTML string case");
+                                let $inlineOpElement = $(newInlineOp);
+                                
+                                // Log what we're processing
+                                console.log("Processing images in:", $inlineOpElement);
+                                console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
+                                
+                                // Process all children
+                                inlineImages($inlineOpElement.children());
+                                
+                                // If we need to handle gifs that should be paused
+                                if (settings.UserSettings.inlineImages && 
+                                    settings.UserSettings.inlineImages.suboptions && 
+                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs && 
+                                    !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+                                    pauseGifs($inlineOpElement.find('img'));
+                                }
                             }, 100);
                         }
                     } else {
                         // If it exists, remove the inline-op element
-                        $inlineOp.parentNode.removeChild($inlineOp);
+                        $inlineOp.remove();
                     }
                 });
             });
@@ -4929,6 +5114,137 @@ function fixImageLoading() {
             img.attr('src', newSrc);
         }
     });
+    
+    // Add proper headers to all AJAX requests to prevent 403 errors
+    $.ajaxSetup({
+        beforeSend: function(xhr) {
+            // Add headers that might help prevent 403 errors
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            
+            // Set a proper referer if possible
+            const currentUrl = window.location.href;
+            if (currentUrl) {
+                xhr.setRequestHeader('Referer', currentUrl);
+            }
+        },
+        error: function(xhr, textStatus, errorThrown) {
+            // Log detailed error information
+            console.error(`AJAX Error: ${textStatus}`, xhr.status, errorThrown);
+            
+            // If we get a 403 error, we might need to adjust our request strategy
+            if (xhr.status === 403) {
+                console.warn('Received 403 Forbidden error. The server may be rate limiting requests or requiring authentication.');
+            }
+        }
+    });
+}
+
+// Modify the expandAllQuotes function to handle 403 errors better
+function expandAllQuotes(postElement) {
+    console.log("Starting expandAllQuotes on", postElement);
+    
+    // Find all backlinks in the post that haven't been expanded yet
+    const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    console.log("Found backlinks:", backlinks.length);
+    
+    if (backlinks.length === 0) {
+        console.log("No backlinks to expand");
+        return; // No more backlinks to expand
+    }
+    
+    // Process each backlink with a delay between clicks
+    let index = 0;
+    
+    function processNextBacklink() {
+        if (index >= backlinks.length) {
+            console.log("All backlinks processed");
+            return; // All done
+        }
+        
+        const link = backlinks[index];
+        console.log("Processing backlink", index, link);
+        index++;
+        
+        try {
+            // Skip if already processed
+            if ($(link).hasClass('inlined')) {
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+            
+            // Get the post data
+            const board = $(link).data('board');
+            const post = $(link).data('post');
+            
+            if (!board || !post) {
+                console.error("Missing data attributes on backlink", link);
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+            
+            // Mark as inlined to prevent duplicate processing
+            $(link).addClass('inlined');
+            
+            // Create container for inlined post
+            const $container = $('<div class="inlined-post-container" id="i' + post + '"></div>');
+            $(link).after($container);
+            
+            // Add a loading indicator
+            $container.html('<div class="loading">Loading post...</div>');
+            
+            // Use a longer delay between requests to avoid rate limiting
+            const requestDelay = 2000; // 2 seconds between requests
+            
+            // Fetch the post content with retry logic
+            setTimeout(() => {
+                $.ajax({
+                    url: `/${board}/post/${post}`,
+                    dataType: 'html',
+                    timeout: 10000, // 10 second timeout
+                    success: function(data) {
+                        // Process the fetched post
+                        const $post = $(data).find(`#p${post}`);
+                        if ($post.length) {
+                            $container.html($post);
+                            
+                            // Process images in the inlined post
+                            setTimeout(function() {
+                                if (typeof inlineImages === 'function') {
+                                    inlineImages($container);
+                                }
+                                
+                                // Continue with the next backlink after a delay
+                                setTimeout(processNextBacklink, 1000);
+                            }, 500);
+                        } else {
+                            $container.html('<div class="error">Post not found</div>');
+                            setTimeout(processNextBacklink, 1000);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle specific error codes
+                        if (xhr.status === 403) {
+                            $container.html('<div class="error">Access forbidden (403). Server may be rate limiting requests.</div>');
+                            console.warn(`403 Forbidden error when fetching post ${post} on board ${board}`);
+                            
+                            // Add a longer delay before the next request when we hit a 403
+                            setTimeout(processNextBacklink, 5000);
+                        } else {
+                            $container.html(`<div class="error">Failed to load post: ${xhr.status} ${error}</div>`);
+                            setTimeout(processNextBacklink, 1000);
+                        }
+                    }
+                });
+            }, requestDelay);
+        } catch (error) {
+            console.error("Error expanding quote:", error);
+            // Continue with the next one even if there was an error
+            setTimeout(processNextBacklink, 1000);
+        }
+    }
+    
+    // Start processing backlinks with an initial delay
+    setTimeout(processNextBacklink, 500);
 }
 
 // Call the image fix function when the document is ready
