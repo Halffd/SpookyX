@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          SpookyX
 // @description   Enhances functionality of FoolFuuka boards. Developed further for more comfortable ghost-posting on the moe archives.
-// @author        Half
+// @author        Fiddlekins
 // @version       32.50
 // @namespace     https://github.com/Fiddlekins/SpookyX
 // @include       http://archive.4plebs.org/*
@@ -10,7 +10,6 @@
 // @include       https://archive.loveisover.me/*
 // @include       http://archive.nyafuu.org/*
 // @include       https://archive.nyafuu.org/*
-// @include       https://arch.b4k.co/*
 // @include       http://desuarchive.org/*
 // @include       https://desuarchive.org/*
 // @include       http://cuckchan.org/*
@@ -34,6 +33,9 @@
 // @include       https://magyarchan.net/*
 // @include       http://www.tokyochronos.net/*
 // @include       https://www.tokyochronos.net/*
+// @include       https://arch.b4k.co/*
+// @include       https://old.sage.moe/*
+// @include       https://arch.b4k.dev/*
 // @require       https://cdn.rawgit.com/madapaja/jquery.selection/master/src/jquery.selection.js
 // @require       https://raw.githubusercontent.com/jquery/jquery-mousewheel/master/jquery.mousewheel.min.js
 // @require       https://raw.githubusercontent.com/carloscabo/colz/master/public/js/colz.class.min.js
@@ -418,6 +420,7 @@ if (GM_info === undefined) {
     var GM_info = { script: { version: '32.50' } };
 }
 
+var search = document.URL.includes('/search/')
 var settings = {
     "UserSettings": {
         "threading": {
@@ -701,7 +704,7 @@ var settings = {
             "name": "Relative Timestamps",
             "description": "Timestamps will be replaced by elapsed time since post",
             "type": "checkbox",
-            "value": true
+            "value": false
         },
         "postQuote": {
             "name": "Post Quote",
@@ -3953,7 +3956,9 @@ $(document).ready(function () {
                 }
             }, 100);
         }
-        processPost($(`#r${postID}`)[0])
+        if(search){
+          processPost($(`#r${postID}`)[0])
+        }
     };
 
     var executeShortcut = function (shortcut) {
@@ -4266,7 +4271,6 @@ $(document).ready(function () {
             }, 250);
         }
     })
-    let search = document.URL.includes('/search/')
     if (settings.UserSettings.threading.value) {
         let open = [];
         let posts = getPosts(); // Assuming getPosts() returns a jQuery object
@@ -4337,7 +4341,7 @@ $(document).ready(function () {
                 });
 
                 // Handle clicks on the valid mentions
-                validMentions.each(function () { handleClicks([this]); });
+                //validMentions.each(function () { handleClicks([this]); });
                 console.log($p, $p.attr('id'), links.length, links); // Log info about the post
             }
         }
@@ -4363,12 +4367,50 @@ $(document).ready(function () {
                     'background': '#220044'
                 });
                 $this.after($button);
+                
+                // Add the expand all button (only on search pages)
+                if (search) {
+                    let $expandButton = $('<button class="expand-all-button">Expand All</button>');
+                    $expandButton.css({
+                        'height': $this.height(),
+                        'border-radius': '5px',
+                        'color': 'white',
+                        'background': '#553311',
+                        'margin-left': '5px',
+                        'font-size': '0.8em',
+                        'padding': '0 5px'
+                    });
+                    $button.after($expandButton);
+                    
+                    // Add click handler for the expand all button
+                    $expandButton.click(function() {
+                        // Get the post element
+                        const postElement = $this.closest('article.post');
+                        
+                        // Change button appearance to indicate it's working
+                        $expandButton.text('Expanding...');
+                        $expandButton.css('background', '#775533');
+                        
+                        // Start the recursive expansion
+                        expandAllQuotes(postElement);
+                        
+                        // Change button appearance after expansion is complete
+                        setTimeout(() => {
+                            $expandButton.text('Expanded');
+                            $expandButton.css('background', '#557755');
+                        }, 5000); // Longer timeout to account for the recursive expansion
+                    });
+                }
+                
                 $button.click(async function () {
                     let opElem = $(getOp()[1]).clone();
                     if (search) {
                         opElem = await fetchOp($this.closest('article.post')[0].id)
                     }
                     opElem.find('aside, #reply, .thread_tools_bottom, .js_hook_realtimethread').remove();
+                    
+                    // Remove duplicate backlink lists to prevent "Quoted By" duplicates
+                    opElem.find('.backlink_list').remove();
 
                     // Set the border style
                     opElem.css('border', '2px solid #773311');
@@ -4377,7 +4419,7 @@ $(document).ready(function () {
 
                     if (!$inlineOp) {
                         // Create the new inline-op element
-                        let newInlineOp = $('<div class="inline-op"></div>')[0]; // Create a DOM element
+                        let newInlineOp = $('<div class="inline-op"></div>')[0]; // Create a jQuery object and get the DOM element
                         parent.after(newInlineOp); // Insert the new element after the parent
 
                         // If opElem is a jQuery object, convert it to a DOM element
@@ -4385,17 +4427,16 @@ $(document).ready(function () {
                             newInlineOp.appendChild(opElem[0]); // Append the first DOM element of the jQuery object
                             
                             // Process images in the cloned OP post
-                            inlineImages($(opElem));
-                            
-                            // If we need to handle gifs that should be paused
-                            if (!settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-                                pauseGifs($(opElem).find('img'));
-                            }
+                            setTimeout(() => {
+                                inlineImages($(newInlineOp).find('article'));
+                            }, 100);
                         } else {
                             newInlineOp.innerHTML += opElem; // If opElem is a string, append it directly
                             
                             // Process images in the HTML string case
-                            inlineImages($(newInlineOp).children());
+                            setTimeout(() => {
+                                inlineImages($(newInlineOp).children());
+                            }, 100);
                         }
                     } else {
                         // If it exists, remove the inline-op element
@@ -4414,7 +4455,7 @@ $(document).ready(function () {
                     targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
                 };
                 scrollToElement()
-
+                let is = 0
                 // Start the interval to scroll the element into view every 500 milliseconds
                 const intervalId = setInterval(() => {
                     //const rect = targetElement.getBoundingClientRect();
@@ -4422,7 +4463,12 @@ $(document).ready(function () {
 
                     // If the element is not in view, scroll to it
                     //if (!isInView) {
+                  if(is > 3){
+                    clearInterval(intervalId)
+                    return
+                  }
                     scrollToElement();
+                    is+=1
                     //}
                 }, 200); // Adjust the interval time as needed
 
@@ -4449,7 +4495,10 @@ $(document).ready(function () {
                     let totalPosts = posts.length;
 
                     const url = document.URL;
-                    const wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
+                    var wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
+                    if(url.split('/')[2].includes('b4k')){
+                      wait = 3500
+                    }
 
                     // Sequentially process each post with a delay
                     for (let i = 0; i < totalPosts; i++) {
@@ -4471,3 +4520,69 @@ $(document).ready(function () {
         processPosts();
     }
 });
+
+// Add the expandAllQuotes function with proper delays
+function expandAllQuotes(postElement) {
+    // Find all backlinks in the post
+    const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    
+    if (backlinks.length === 0) {
+        return; // No more backlinks to expand
+    }
+    
+    // Process each backlink with a delay between clicks
+    let index = 0;
+    
+    function processNextBacklink() {
+        if (index >= backlinks.length) {
+            return; // All done
+        }
+        
+        const link = backlinks[index];
+        index++;
+        
+        try {
+            // Check if clickHandler is defined
+            if (typeof clickHandler !== 'function') {
+                console.error("clickHandler is not defined");
+                setTimeout(processNextBacklink, 500);
+                return;
+            }
+            
+            // Create a simulated click event
+            const event = {
+                target: link,
+                originalEvent: { ctrlKey: false },
+                which: 1,
+                preventDefault: () => {}
+            };
+            
+            // Call the click handler
+            clickHandler(event, true);
+            
+            // Get the post ID from the link
+            const postID = link.dataset.post.replace(',', '_');
+            
+            // Find the inlined post
+            const inlinedPost = $(`#i${postID}`);
+            
+            // Wait longer before processing the next backlink
+            setTimeout(() => {
+                // Recursively expand quotes in the newly expanded post
+                if (inlinedPost.length) {
+                    expandAllQuotes(inlinedPost);
+                }
+                
+                // Process the next backlink with a delay
+                setTimeout(processNextBacklink, 500);
+            }, 300);
+        } catch (error) {
+            console.error("Error expanding quote:", error);
+            // Continue with the next one even if there was an error
+            setTimeout(processNextBacklink, 500);
+        }
+    }
+    
+    // Start processing backlinks
+    processNextBacklink();
+}
