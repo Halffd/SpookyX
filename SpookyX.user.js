@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          SpookyX
 // @description   Enhances functionality of FoolFuuka boards. Developed further for more comfortable ghost-posting on the moe archives.
-// @author        Fiddlekins
+// @author        Half
 // @version       32.50
 // @namespace     https://github.com/Fiddlekins/SpookyX
 // @include       http://archive.4plebs.org/*
@@ -4377,14 +4377,25 @@ $(document).ready(function () {
 
                     if (!$inlineOp) {
                         // Create the new inline-op element
-                        let newInlineOp = $('<div class="inline-op"></div>')[0]; // Create a jQuery object and get the DOM element
+                        let newInlineOp = $('<div class="inline-op"></div>')[0]; // Create a DOM element
                         parent.after(newInlineOp); // Insert the new element after the parent
 
                         // If opElem is a jQuery object, convert it to a DOM element
                         if (opElem instanceof jQuery) {
                             newInlineOp.appendChild(opElem[0]); // Append the first DOM element of the jQuery object
+                            
+                            // Process images in the cloned OP post
+                            inlineImages($(opElem));
+                            
+                            // If we need to handle gifs that should be paused
+                            if (!settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+                                pauseGifs($(opElem).find('img'));
+                            }
                         } else {
                             newInlineOp.innerHTML += opElem; // If opElem is a string, append it directly
+                            
+                            // Process images in the HTML string case
+                            inlineImages($(newInlineOp).children());
                         }
                     } else {
                         // If it exists, remove the inline-op element
