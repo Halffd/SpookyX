@@ -201,29 +201,29 @@ function generatePost(postData) {
 }
 const generatePostElem = async (postData) => {
     var postElement = generatePost(postData);
-    
+
     // Add debugging to check if postData has media
     console.log("generatePostElem - postData:", postData);
-    
+
     // Check if postData and media exist before trying to access them
     if (postData && postData.media && postData.media.media_link) {
         try {
             console.log("Attempting to load image from:", postData.media.media_link);
-            
+
             // Create the image element directly without trying to fetch via proxy
             var imageElement = $('<img>').attr('src', postData.media.media_link).css({
                 'width': '500px',
                 'height': '500px'
             }).addClass('post-image');
-            
+
             // Add error handling for the image
             imageElement.on('error', function() {
                 console.error('Image failed to load:', postData.media.media_link);
-                
+
                 // Try alternative URLs if the original fails
                 const originalSrc = postData.media.media_link;
                 let newSrc = originalSrc;
-                
+
                 // Try different domain variations
                 if (originalSrc.includes('arch-img.b4k.dev')) {
                     newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -232,17 +232,17 @@ const generatePostElem = async (postData) => {
                 } else if (originalSrc.includes('is.4chan.org')) {
                     newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
                 }
-                
+
                 if (newSrc !== originalSrc) {
                     console.log('Trying alternative image source:', newSrc);
                     $(this).attr('src', newSrc);
                 }
             });
-            
+
             // Add the image container and image
             let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
             postElement.find('.thread_image_box').prepend(imageElement);
-            
+
             console.log("Image element added to post:", imageElement);
         } catch (error) {
             console.error('Error creating image element:', error);
@@ -250,7 +250,7 @@ const generatePostElem = async (postData) => {
     } else {
         console.warn("Post data missing media information:", postData);
     }
-    
+
     return postElement;
 }
 var ops = []
@@ -274,7 +274,7 @@ const fetchData = async (url, data) => {
     const maxRetries = 3;
     let retryCount = 0;
     let retryDelay = 2000; // Start with 2 seconds delay
-    
+
     while (retryCount < maxRetries) {
         try {
             const result = await jQuery.ajax({
@@ -286,7 +286,7 @@ const fetchData = async (url, data) => {
                 beforeSend: function(xhr) {
                     // Add headers that might help prevent 403 errors
                     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                    
+
                     // Set a proper referer if possible
                     const currentUrl = window.location.href;
                     if (currentUrl) {
@@ -304,13 +304,13 @@ const fetchData = async (url, data) => {
             // Check if it's a 403 error or other network error that might benefit from retrying
             if (error.status === 403 || error.status === 429 || error.status === 0) {
                 retryCount++;
-                
+
                 if (retryCount < maxRetries) {
                     console.warn(`Received ${error.status} error. Retrying (${retryCount}/${maxRetries}) after ${retryDelay}ms...`);
-                    
+
                     // Wait before retrying
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
-                    
+
                     // Exponential backoff - double the delay for next retry
                     retryDelay *= 2;
                 } else {
@@ -410,7 +410,7 @@ const fetchThread = async (board, threadId) => {
 async function fetchRepliesWithRetry(aElem, retries = 3, wait = 2000) {
     let lastError = null;
     let exponentialWait = wait;
-    
+
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
             let replies = await fetchReplies(aElem); // Attempt to fetch replies
@@ -418,23 +418,23 @@ async function fetchRepliesWithRetry(aElem, retries = 3, wait = 2000) {
         } catch (error) {
             lastError = error;
             console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
-            
+
             // If it's a 403 error, we might need a longer wait
             if (error.status === 403 || error.status === 429) {
                 console.warn(`Received ${error.status} error. Using longer delay.`);
                 exponentialWait *= 2; // Double the wait time for rate limit errors
             }
-            
+
             if (attempt < retries - 1) {
                 console.log(`Waiting ${exponentialWait}ms before retry ${attempt + 2}...`);
                 await new Promise(resolve => setTimeout(resolve, exponentialWait)); // Wait before retrying
             }
         }
     }
-    
+
     // If we get here, all retries failed
     console.error(`Failed to fetch replies after ${retries} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
-    
+
     // Return an empty array instead of throwing to prevent breaking the UI
     return [];
 }
@@ -1772,35 +1772,35 @@ function delayedLoad(posts) {
 
 function inlineImages(posts) {
     console.log("inlineImages called with:", posts);
-    
+
     // If posts is not a jQuery object, convert it
     if (!(posts instanceof jQuery)) {
         posts = $(posts);
     }
-    
+
     // Log how many posts we're processing
     console.log(`Processing ${posts.length} posts for inline images`);
-    
+
     posts.each(function (i, post) {
         var $post = $(post);
         console.log(`Processing post ${i}:`, $post);
-        
+
         // Find all thread_image_box elements in this post
-        var $imageBoxes = $post.hasClass('thread') ? 
-            $post.children('.thread_image_box') : 
+        var $imageBoxes = $post.hasClass('thread') ?
+            $post.children('.thread_image_box') :
             $post.find('.thread_image_box');
-        
+
         console.log(`Found ${$imageBoxes.length} image boxes in post ${i}`);
-        
+
         $imageBoxes.each(function (j, currentImage) {
             var $currentImage = $(currentImage);
             console.log(`Processing image box ${j} in post ${i}:`, $currentImage);
-            
+
             // Process links in the image box
             $currentImage.find('>a').each(function (k, imgLink) {
                 var fullImage = imgLink.href;
                 console.log(`Processing image link ${k} with href: ${fullImage}`);
-                
+
                 if (settings.UserSettings.inlineImages.suboptions.processSpoiler.value && $currentImage.find('.spoiler_box').length) {
                     $(imgLink).html('<div class="spoilerText">Spoiler</div><img class="smallImage spoilerImage">');
                     var $image = $currentImage.find('img');
@@ -1808,7 +1808,7 @@ function inlineImages(posts) {
                         $currentImage.find(".spoilerText").css({ "top": (e.target.height / 2) - 6.5 }); // Center spoiler text
                     });
                 }
-                
+
                 if (/\.webm$/i.test(fullImage)) { // Handle post webms
                     if (settings.UserSettings.inlineImages.suboptions.inlineVideos.value) {
                         $currentImage.prepend('<video width="' + ($(post).hasClass('thread') ? imageWidthOP : imageWidth) + '" name="media" loop muted ' + autoplayVid + '><source src="' + fullImage + '" type="video/webm"></video>');
@@ -1819,19 +1819,19 @@ function inlineImages(posts) {
                     $currentImage.find('img').each(function (l, image) {
                         var $image = $(image);
                         var thumbImage = $(image).attr('src');
-                        
+
                         console.log(`Setting image src to: ${fullImage}`);
                         $image.attr('src', fullImage);
-                        
+
                         $image.error(function () { // Handle images that won't load
                             console.error(`Image failed to load: ${fullImage}`);
-                            
+
                             if (!$image.data('tried4pleb')) {
                                 $image.data('tried4pleb', true);
-                                
+
                                 // Try alternative URLs if the original fails
                                 let newSrc = fullImage;
-                                
+
                                 // Try different domain variations
                                 if (fullImage.includes('arch-img.b4k.dev')) {
                                     newSrc = fullImage.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -1840,7 +1840,7 @@ function inlineImages(posts) {
                                 } else if (fullImage.includes('is.4chan.org')) {
                                     newSrc = fullImage.replace('is.4chan.org', 'i.4cdn.org');
                                 }
-                                
+
                                 if (newSrc !== fullImage) {
                                     console.log(`Trying alternative image source: ${newSrc}`);
                                     $image.attr('src', newSrc);
@@ -1854,21 +1854,21 @@ function inlineImages(posts) {
                     });
                 }
             });
-            
+
             // Also check for post-image class which might be added by generatePostElem
             $currentImage.find('img.post-image').each(function(m, image) {
                 console.log("Found post-image:", image);
                 var $image = $(image);
-                
+
                 // Make sure the image is visible and properly sized
                 $image.css({
                     'display': 'block',
                     'max-width': '100%',
                     'height': 'auto'
                 });
-                
+
                 // Add hover functionality if needed
-                if (settings.UserSettings.inlineImages.suboptions.imageHover && 
+                if (settings.UserSettings.inlineImages.suboptions.imageHover &&
                     settings.UserSettings.inlineImages.suboptions.imageHover.value) {
                     addHover($image);
                 }
@@ -4508,7 +4508,7 @@ $(document).ready(function () {
                     'background': '#220044'
                 });
                 $this.after($button);
-                
+
                 // Add the expand all button (only on search pages)
                 if (search) {
                     let $expandButton = $('<button class="expand-all-button">Expand All</button>');
@@ -4522,19 +4522,19 @@ $(document).ready(function () {
                         'padding': '0 5px'
                     });
                     $button.after($expandButton);
-                    
+
                     // Add click handler for the expand all button
                     $expandButton.click(function() {
                         // Get the post element
                         const postElement = $this.closest('article.post');
-                        
+
                         // Change button appearance to indicate it's working
                         $expandButton.text('Expanding...');
                         $expandButton.css('background', '#775533');
-                        
+
                         // Start the recursive expansion
                         expandAllQuotes(postElement);
-                        
+
                         // Change button appearance after expansion is complete
                         setTimeout(() => {
                             $expandButton.text('Expanded');
@@ -4542,7 +4542,7 @@ $(document).ready(function () {
                         }, 5000); // Longer timeout to account for the recursive expansion
                     });
                 }
-                
+
                 $button.click(async function () {
                     console.log("OP button clicked");
                     let opElem = $(getOp()[1]).clone();
@@ -4552,13 +4552,13 @@ $(document).ready(function () {
                         console.log("Fetched OP element:", opElem);
                     }
                     opElem.find('aside, #reply, .thread_tools_bottom, .js_hook_realtimethread').remove();
-                    
+
                     // Remove duplicate backlink lists to prevent "Quoted By" duplicates
                     opElem.find('.backlink_list').remove();
 
                     // Set the border style
                     opElem.css('border', '2px solid #773311');
-                    
+
                     // Find the parent element
                     let parent = $this.parent();
                     let $inlineOp = parent.next('.inline-op');
@@ -4573,27 +4573,27 @@ $(document).ready(function () {
                         if (opElem instanceof jQuery) {
                             console.log("Appending jQuery opElem to newInlineOp");
                             newInlineOp.appendChild(opElem[0]);
-                            
+
                             // Process images in the cloned OP post - use a more direct selector
                             setTimeout(() => {
                                 console.log("Processing images in opElem");
                                 // First try to process the entire inline-op element
                                 let $inlineOpElement = $(newInlineOp);
-                                
+
                                 // Log what we're processing
                                 console.log("Processing images in:", $inlineOpElement);
                                 console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
-                                
+
                                 // Process images directly on the opElem first
                                 inlineImages(opElem);
-                                
+
                                 // Then process the entire inline-op element
                                 inlineImages($inlineOpElement);
-                                
+
                                 // If we need to handle gifs that should be paused
-                                if (settings.UserSettings.inlineImages && 
-                                    settings.UserSettings.inlineImages.suboptions && 
-                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs && 
+                                if (settings.UserSettings.inlineImages &&
+                                    settings.UserSettings.inlineImages.suboptions &&
+                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
                                     !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
                                     pauseGifs($inlineOpElement.find('img'));
                                 }
@@ -4601,23 +4601,23 @@ $(document).ready(function () {
                         } else {
                             console.log("Appending HTML string opElem to newInlineOp");
                             newInlineOp.innerHTML += opElem;
-                            
+
                             // Process images in the HTML string case
                             setTimeout(() => {
                                 console.log("Processing images in HTML string case");
                                 let $inlineOpElement = $(newInlineOp);
-                                
+
                                 // Log what we're processing
                                 console.log("Processing images in:", $inlineOpElement);
                                 console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
-                                
+
                                 // Process all children
                                 inlineImages($inlineOpElement.children());
-                                
+
                                 // If we need to handle gifs that should be paused
-                                if (settings.UserSettings.inlineImages && 
-                                    settings.UserSettings.inlineImages.suboptions && 
-                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs && 
+                                if (settings.UserSettings.inlineImages &&
+                                    settings.UserSettings.inlineImages.suboptions &&
+                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
                                     !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
                                     pauseGifs($inlineOpElement.find('img'));
                                 }
@@ -4709,45 +4709,45 @@ $(document).ready(function () {
 // Add the expandAllQuotes function with proper delays
 function expandAllQuotes(postElement) {
     console.log("Starting expandAllQuotes on", postElement);
-    
+
     // Find all backlinks in the post that haven't been expanded yet
     const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
     console.log("Found backlinks:", backlinks.length);
-    
+
     if (backlinks.length === 0) {
         console.log("No backlinks to expand");
         return; // No more backlinks to expand
     }
-    
+
     // Process each backlink with a delay between clicks
     let index = 0;
-    
+
     function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
         }
-        
+
         const link = backlinks[index];
         console.log("Processing backlink", index, link);
         index++;
-        
+
         try {
             // Check if clickHandler is defined
             if (typeof clickHandler !== 'function') {
                 console.error("clickHandler is not defined - trying to find it");
-                
+
                 // Try to find the click handler function
                 clickHandler = function(e, called = false) {
                     console.log("Using fallback clickHandler");
                     // Simulate a click on the backlink
                     $(e.target).trigger('click');
                 };
-                
+
                 setTimeout(processNextBacklink, 500);
                 return;
             }
-            
+
             // Create a simulated click event
             const event = {
                 target: link,
@@ -4755,47 +4755,47 @@ function expandAllQuotes(postElement) {
                 which: 1,
                 preventDefault: () => {}
             };
-            
+
             // Call the click handler
             console.log("Calling clickHandler");
             clickHandler(event, true);
-            
+
             // Get the post ID from the link
             const postID = link.dataset.post;
             console.log("Post ID:", postID);
-            
+
             // Wait longer before processing the next backlink
             setTimeout(() => {
                 // Find the inlined post
                 const inlinedPost = $(`#i${postID}`);
                 console.log("Inlined post found:", inlinedPost.length > 0);
-                
+
                 if (inlinedPost.length > 0) {
                     // Process images in the inlined post
                     try {
                         // Find all images in the inlined post
                         const images = inlinedPost.find('img.post_image');
                         console.log("Found images:", images.length);
-                        
+
                         // Process each image
                         images.each(function() {
                             const img = $(this);
                             const src = img.data('src') || img.attr('src');
-                            
+
                             // If using data-src (lazy loading), set the src attribute
                             if (img.data('src') && !img.attr('src')) {
                                 img.attr('src', src);
                             }
-                            
+
                             // If we have settings for inline images, apply them
-                            if (settings.UserSettings.inlineImages && 
+                            if (settings.UserSettings.inlineImages &&
                                 settings.UserSettings.inlineImages.value) {
-                                
+
                                 // Replace thumbnail with full image if not using delayed load
                                 if (!settings.UserSettings.inlineImages.suboptions.delayedLoad.value) {
                                     // Get the full image URL
                                     const fullSrc = src.replace('thumb/', '').replace('s.jpg', '.jpg');
-                                    
+
                                     // Create a new image to preload
                                     const fullImg = new Image();
                                     fullImg.onload = function() {
@@ -4806,7 +4806,7 @@ function expandAllQuotes(postElement) {
                                 }
                             }
                         });
-                        
+
                         // If there's a function to inline images, call it
                         if (typeof inlineImages === 'function') {
                             inlineImages(inlinedPost);
@@ -4816,7 +4816,7 @@ function expandAllQuotes(postElement) {
                         console.error("Error processing images:", imgError);
                     }
                 }
-                
+
                 // Process the next backlink with a delay
                 setTimeout(processNextBacklink, 500);
             }, 1000);
@@ -4826,7 +4826,7 @@ function expandAllQuotes(postElement) {
             setTimeout(processNextBacklink, 500);
         }
     }
-    
+
     // Start processing backlinks
     processNextBacklink();
 }
@@ -4838,72 +4838,72 @@ var clickHandler;
 // and modify it to assign to our global variable
 $(function() {
     // ... existing code ...
-    
+
     // Find the existing click handler for backlinks
     $(document).on('click', '.backlink', function(e) {
         // Store this function as the global clickHandler
         clickHandler = function(e, called = false) {
             console.warn(e, called);
-            
+
             // The rest of your existing click handler code
             if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
                 // ... existing code ...
             }
             // ... rest of function ...
         };
-        
+
         // Call the function for the current click
         clickHandler(e, false);
-        
+
         // Prevent default if needed
         // ... existing code ...
     });
-    
+
     // ... rest of document ready function ...
 });
 
 // Then modify the expandAllQuotes function to handle errors better
 function expandAllQuotes(postElement) {
     console.log("Starting expandAllQuotes on", postElement);
-    
+
     // Find all backlinks in the post that haven't been expanded yet
     const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
     console.log("Found backlinks:", backlinks.length);
-    
+
     if (backlinks.length === 0) {
         console.log("No backlinks to expand");
         return; // No more backlinks to expand
     }
-    
+
     // Process each backlink with a delay between clicks
     let index = 0;
-    
+
     function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
         }
-        
+
         const link = backlinks[index];
         console.log("Processing backlink", index, link);
         index++;
-        
+
         try {
             // Check if clickHandler is defined
             if (typeof clickHandler !== 'function') {
                 console.error("clickHandler is not defined - trying to find it");
-                
+
                 // Try to find the click handler function
                 clickHandler = function(e, called = false) {
                     console.log("Using fallback clickHandler");
                     // Simulate a click on the backlink
                     $(e.target).trigger('click');
                 };
-                
+
                 setTimeout(processNextBacklink, 500);
                 return;
             }
-            
+
             // Create a simulated click event
             const event = {
                 target: link,
@@ -4911,21 +4911,21 @@ function expandAllQuotes(postElement) {
                 which: 1,
                 preventDefault: () => {}
             };
-            
+
             // Call the click handler
             console.log("Calling clickHandler");
             clickHandler(event, true);
-            
+
             // Get the post ID from the link
             const postID = link.dataset.post;
             console.log("Post ID:", postID);
-            
+
             // Wait longer before processing the next backlink
             setTimeout(() => {
                 // Find the inlined post
                 const inlinedPost = $(`#i${postID}`);
                 console.log("Inlined post found:", inlinedPost.length > 0);
-                
+
                 // Process the next backlink with a delay
                 setTimeout(processNextBacklink, 500);
             }, 1000);
@@ -4935,7 +4935,7 @@ function expandAllQuotes(postElement) {
             setTimeout(processNextBacklink, 500);
         }
     }
-    
+
     // Start processing backlinks
     processNextBacklink();
 }
@@ -4947,34 +4947,34 @@ var clickHandler;
 $(function() {
     // Capture the existing click handler for backlinks
     const originalBacklinkHandler = $('.backlink').prop('onclick');
-    
+
     // Define our global clickHandler that will be used by expandAllQuotes
     clickHandler = function(e, called = false) {
         try {
             console.log("clickHandler called", e.target);
-            
+
             // If it's a backlink and inline replies are enabled
             if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
                 e.preventDefault();
-                
+
                 const $this = $(e.target);
                 const board = $this.data('board');
                 const post = $this.data('post');
-                
+
                 // Check if already inlined
                 if ($this.hasClass('inlined')) {
                     // Toggle visibility of inlined post
                     $(`#i${post}`).toggle();
                     return;
                 }
-                
+
                 // Mark as inlined
                 $this.addClass('inlined');
-                
+
                 // Create container for inlined post
                 const $container = $('<div class="inlined-post-container"></div>');
                 $this.after($container);
-                
+
                 // Fetch the post content
                 $.ajax({
                     url: `/${board}/post/${post}`,
@@ -4984,7 +4984,7 @@ $(function() {
                         const $post = $(data).find(`#p${post}`);
                         if ($post.length) {
                             $container.html($post);
-                            
+
                             // Process images in the inlined post
                             setTimeout(function() {
                                 if (typeof inlineImages === 'function') {
@@ -5002,7 +5002,7 @@ $(function() {
             console.error("Error in clickHandler:", error);
         }
     };
-    
+
     // Override the click handler for backlinks
     $(document).on('click', '.backlink', function(e) {
         clickHandler(e, false);
@@ -5012,53 +5012,53 @@ $(function() {
 // Improved expandAllQuotes function with better image handling
 function expandAllQuotes(postElement) {
     console.log("Starting expandAllQuotes on", postElement);
-    
+
     // Find all backlinks in the post that haven't been expanded yet
     const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
     console.log("Found backlinks:", backlinks.length);
-    
+
     if (backlinks.length === 0) {
         console.log("No backlinks to expand");
         return; // No more backlinks to expand
     }
-    
+
     // Process each backlink with a delay between clicks
     let index = 0;
-    
+
     function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
         }
-        
+
         const link = backlinks[index];
         console.log("Processing backlink", index, link);
         index++;
-        
+
         try {
             // Skip if already processed
             if ($(link).hasClass('inlined')) {
                 setTimeout(processNextBacklink, 100);
                 return;
             }
-            
+
             // Get the post data
             const board = $(link).data('board');
             const post = $(link).data('post');
-            
+
             if (!board || !post) {
                 console.error("Missing data attributes on backlink", link);
                 setTimeout(processNextBacklink, 100);
                 return;
             }
-            
+
             // Mark as inlined to prevent duplicate processing
             $(link).addClass('inlined');
-            
+
             // Create container for inlined post
             const $container = $('<div class="inlined-post-container" id="i' + post + '"></div>');
             $(link).after($container);
-            
+
             // Fetch the post content directly
             $.ajax({
                 url: `/${board}/post/${post}`,
@@ -5068,13 +5068,13 @@ function expandAllQuotes(postElement) {
                     const $post = $(data).find(`#p${post}`);
                     if ($post.length) {
                         $container.html($post);
-                        
+
                         // Process images in the inlined post
                         setTimeout(function() {
                             if (typeof inlineImages === 'function') {
                                 inlineImages($container);
                             }
-                            
+
                             // Continue with the next backlink after a delay
                             setTimeout(processNextBacklink, 500);
                         }, 300);
@@ -5094,7 +5094,7 @@ function expandAllQuotes(postElement) {
             setTimeout(processNextBacklink, 500);
         }
     }
-    
+
     // Start processing backlinks
     processNextBacklink();
 }
@@ -5105,7 +5105,7 @@ function fixImageLoading() {
     $('img.post_image').on('error', function() {
         const img = $(this);
         const src = img.attr('src');
-        
+
         // If the image failed to load, try an alternative source
         if (src && src.includes('arch-img.b4k.dev')) {
             // Try loading via a different path
@@ -5114,13 +5114,13 @@ function fixImageLoading() {
             img.attr('src', newSrc);
         }
     });
-    
+
     // Add proper headers to all AJAX requests to prevent 403 errors
     $.ajaxSetup({
         beforeSend: function(xhr) {
             // Add headers that might help prevent 403 errors
             xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            
+
             // Set a proper referer if possible
             const currentUrl = window.location.href;
             if (currentUrl) {
@@ -5130,7 +5130,7 @@ function fixImageLoading() {
         error: function(xhr, textStatus, errorThrown) {
             // Log detailed error information
             console.error(`AJAX Error: ${textStatus}`, xhr.status, errorThrown);
-            
+
             // If we get a 403 error, we might need to adjust our request strategy
             if (xhr.status === 403) {
                 console.warn('Received 403 Forbidden error. The server may be rate limiting requests or requiring authentication.');
@@ -5142,59 +5142,59 @@ function fixImageLoading() {
 // Modify the expandAllQuotes function to handle 403 errors better
 function expandAllQuotes(postElement) {
     console.log("Starting expandAllQuotes on", postElement);
-    
+
     // Find all backlinks in the post that haven't been expanded yet
     const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
     console.log("Found backlinks:", backlinks.length);
-    
+
     if (backlinks.length === 0) {
         console.log("No backlinks to expand");
         return; // No more backlinks to expand
     }
-    
+
     // Process each backlink with a delay between clicks
     let index = 0;
-    
+
     function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
         }
-        
+
         const link = backlinks[index];
         console.log("Processing backlink", index, link);
         index++;
-        
+
         try {
             // Skip if already processed
             if ($(link).hasClass('inlined')) {
                 setTimeout(processNextBacklink, 100);
                 return;
             }
-            
+
             // Get the post data
             const board = $(link).data('board');
             const post = $(link).data('post');
-            
+
             if (!board || !post) {
                 console.error("Missing data attributes on backlink", link);
                 setTimeout(processNextBacklink, 100);
                 return;
             }
-            
+
             // Mark as inlined to prevent duplicate processing
             $(link).addClass('inlined');
-            
+
             // Create container for inlined post
             const $container = $('<div class="inlined-post-container" id="i' + post + '"></div>');
             $(link).after($container);
-            
+
             // Add a loading indicator
             $container.html('<div class="loading">Loading post...</div>');
-            
+
             // Use a longer delay between requests to avoid rate limiting
             const requestDelay = 2000; // 2 seconds between requests
-            
+
             // Fetch the post content with retry logic
             setTimeout(() => {
                 $.ajax({
@@ -5206,13 +5206,13 @@ function expandAllQuotes(postElement) {
                         const $post = $(data).find(`#p${post}`);
                         if ($post.length) {
                             $container.html($post);
-                            
+
                             // Process images in the inlined post
                             setTimeout(function() {
                                 if (typeof inlineImages === 'function') {
                                     inlineImages($container);
                                 }
-                                
+
                                 // Continue with the next backlink after a delay
                                 setTimeout(processNextBacklink, 1000);
                             }, 500);
@@ -5226,7 +5226,7 @@ function expandAllQuotes(postElement) {
                         if (xhr.status === 403) {
                             $container.html('<div class="error">Access forbidden (403). Server may be rate limiting requests.</div>');
                             console.warn(`403 Forbidden error when fetching post ${post} on board ${board}`);
-                            
+
                             // Add a longer delay before the next request when we hit a 403
                             setTimeout(processNextBacklink, 5000);
                         } else {
@@ -5242,7 +5242,7 @@ function expandAllQuotes(postElement) {
             setTimeout(processNextBacklink, 1000);
         }
     }
-    
+
     // Start processing backlinks with an initial delay
     setTimeout(processNextBacklink, 500);
 }
@@ -5250,205 +5250,4 @@ function expandAllQuotes(postElement) {
 // Call the image fix function when the document is ready
 $(function() {
     fixImageLoading();
-    
-    // Also periodically check for new images that might need fixing
-    setInterval(function() {
-        $('img.post_image:not(.error-checked)').each(function() {
-            const img = $(this);
-            img.addClass('error-checked');
-            
-            // If the image is already in an error state, try to fix it
-            if (img[0].naturalWidth === 0 && img[0].naturalHeight === 0 && !img[0].complete) {
-                img.trigger('error');
-            }
-        });
-    }, 2000);
-});
-
-// Enhanced image loading fix to handle CORS issues
-function fixImageLoading() {
-    // Apply to all images, both existing and future ones
-    $(document).on('error', 'img.post_image', function() {
-        const img = $(this);
-        const src = img.attr('src');
-        
-        if (!src) return;
-        
-        console.log(`Image failed to load: ${src}`);
-        img.addClass('error-placeholder');
-        
-        // Try different approaches to load the image
-        if (src.includes('arch-img.b4k.dev')) {
-            // Approach 1: Try the b4k.co domain instead
-            const newSrc1 = src.replace('arch-img.b4k.dev', 'b4k.co/media');
-            console.log(`Trying alternative source: ${newSrc1}`);
-            
-            // Create a test image to see if this source works
-            const testImg1 = new Image();
-            testImg1.onload = function() {
-                console.log(`Success with: ${newSrc1}`);
-                img.attr('src', newSrc1);
-                img.removeClass('error-placeholder');
-            };
-            testImg1.onerror = function() {
-                // Approach 2: Try using the thumbnail instead of full image
-                if (src.includes('.jpg') && !src.includes('s.jpg')) {
-                    const thumbSrc = src.replace('.jpg', 's.jpg');
-                    console.log(`Trying thumbnail: ${thumbSrc}`);
-                    img.attr('src', thumbSrc);
-                }
-                // Approach 3: Try using a data URL placeholder
-                else {
-                    console.log("Using placeholder image");
-                    img.attr('src', 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 300 200%22%3E%3Crect width%3D%22300%22 height%3D%22200%22 fill%3D%22%23cccccc%22%3E%3C%2Frect%3E%3Ctext x%3D%22150%22 y%3D%22100%22 font-size%3D%2220%22 text-anchor%3D%22middle%22 alignment-baseline%3D%22middle%22 fill%3D%22%23333333%22%3EImage Failed to Load%3C%2Ftext%3E%3C%2Fsvg%3E');
-                    
-                    // Add a click handler to try loading the image again
-                    img.css('cursor', 'pointer');
-                    img.attr('title', 'Click to try loading the image again');
-                    img.off('click').on('click', function() {
-                        window.open(src, '_blank');
-                    });
-                }
-            };
-            testImg1.src = newSrc1;
-        }
-    });
-    
-    // Fix for CORS issues in the fetchOp function
-    const originalFetchOp = window.fetchOp || function() {};
-    window.fetchOp = function(aElem) {
-        // Check if we're using CORS-anywhere
-        if (typeof originalFetchOp === 'function') {
-            try {
-                // Modify any URLs in the function to avoid CORS-anywhere
-                const result = originalFetchOp.apply(this, arguments);
-                
-                // If it's a promise, intercept the result
-                if (result && typeof result.then === 'function') {
-                    return result.then(function(data) {
-                        // Process the data to fix any image URLs
-                        if (data && data.html) {
-                            data.html = data.html.replace(/cors-anywhere\.herokuapp\.com\//g, '');
-                        }
-                        return data;
-                    });
-                }
-                
-                return result;
-            } catch (e) {
-                console.error("Error in fetchOp:", e);
-                return Promise.reject(e);
-            }
-        }
-    };
-    
-    // Override any functions that might be using CORS-anywhere
-    const originalAjax = $.ajax;
-    $.ajax = function(options) {
-        if (options && options.url) {
-            // Remove CORS-anywhere from URLs
-            if (options.url.includes('cors-anywhere.herokuapp.com')) {
-                options.url = options.url.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
-                console.log("Removed CORS-anywhere from URL:", options.url);
-                
-                // Add crossOrigin attribute if it's an image request
-                if (options.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-                    options.crossDomain = true;
-                    options.xhrFields = options.xhrFields || {};
-                    options.xhrFields.crossOrigin = "anonymous";
-                }
-            }
-        }
-        return originalAjax.apply(this, arguments);
-    };
-    
-    // Also add a function to preload images with proper CORS handling
-    window.preloadImage = function(url, callback) {
-        if (!url) {
-            if (callback) callback(false);
-            return;
-        }
-        
-        // Remove CORS-anywhere if present
-        url = url.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
-        
-        // Try to load the image
-        const img = new Image();
-        img.crossOrigin = "anonymous"; // Try to avoid CORS issues
-        img.onload = function() {
-            if (callback) callback(true, img);
-        };
-        img.onerror = function() {
-            // Try alternative sources
-            const alt1 = url.replace('arch-img.b4k.dev', 'b4k.co/media');
-            const altImg = new Image();
-            altImg.crossOrigin = "anonymous";
-            altImg.onload = function() {
-                if (callback) callback(true, altImg, alt1);
-            };
-            altImg.onerror = function() {
-                if (callback) callback(false);
-            };
-            altImg.src = alt1;
-        };
-        img.src = url;
-    };
-    
-    // Enhance the inlineImages function if it exists
-    if (typeof inlineImages === 'function') {
-        const originalInlineImages = inlineImages;
-        window.inlineImages = function(container) {
-            // Call the original function
-            originalInlineImages(container);
-            
-            // Then enhance the images
-            $(container).find('img.post_image').each(function() {
-                const img = $(this);
-                const src = img.data('src') || img.attr('src');
-                
-                if (!src) return;
-                
-                // Remove CORS-anywhere if present
-                if (src.includes('cors-anywhere.herokuapp.com')) {
-                    const newSrc = src.replace(/https?:\/\/cors-anywhere\.herokuapp\.com\//g, '');
-                    img.attr('src', newSrc);
-                    if (img.data('src')) {
-                        img.data('src', newSrc);
-                    }
-                }
-                
-                // If using data-src (lazy loading), set the src attribute
-                if (img.data('src') && !img.attr('src')) {
-                    img.attr('src', img.data('src'));
-                }
-                
-                // Add click handler to open image in new tab if it fails
-                img.off('click.errorFix').on('click.errorFix', function(e) {
-                    if (img.hasClass('error-placeholder')) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        window.open(src, '_blank');
-                    }
-                });
-            });
-        };
-    }
-}
-
-// Call the image fix function when the document is ready
-$(function() {
-    fixImageLoading();
-    
-    // Also periodically check for new images that might need fixing
-    setInterval(function() {
-        $('img.post_image:not(.error-checked)').each(function() {
-            const img = $(this);
-            img.addClass('error-checked');
-            
-            // If the image is already in an error state, try to fix it
-            if (img[0].naturalWidth === 0 && img[0].naturalHeight === 0 && !img[0].complete) {
-                img.trigger('error');
-            }
-        });
-    }, 2000);
 });
