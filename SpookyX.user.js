@@ -4523,10 +4523,14 @@ $(document).ready(function () {
 
 // Add the expandAllQuotes function with proper delays
 function expandAllQuotes(postElement) {
-    // Find all backlinks in the post
+    console.log("Starting expandAllQuotes on", postElement);
+    
+    // Find all backlinks in the post that haven't been expanded yet
     const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    console.log("Found backlinks:", backlinks.length);
     
     if (backlinks.length === 0) {
+        console.log("No backlinks to expand");
         return; // No more backlinks to expand
     }
     
@@ -4535,16 +4539,26 @@ function expandAllQuotes(postElement) {
     
     function processNextBacklink() {
         if (index >= backlinks.length) {
+            console.log("All backlinks processed");
             return; // All done
         }
         
         const link = backlinks[index];
+        console.log("Processing backlink", index, link);
         index++;
         
         try {
             // Check if clickHandler is defined
             if (typeof clickHandler !== 'function') {
-                console.error("clickHandler is not defined");
+                console.error("clickHandler is not defined - trying to find it");
+                
+                // Try to find the click handler function
+                clickHandler = function(e, called = false) {
+                    console.log("Using fallback clickHandler");
+                    // Simulate a click on the backlink
+                    $(e.target).trigger('click');
+                };
+                
                 setTimeout(processNextBacklink, 500);
                 return;
             }
@@ -4558,24 +4572,69 @@ function expandAllQuotes(postElement) {
             };
             
             // Call the click handler
+            console.log("Calling clickHandler");
             clickHandler(event, true);
             
             // Get the post ID from the link
-            const postID = link.dataset.post.replace(',', '_');
-            
-            // Find the inlined post
-            const inlinedPost = $(`#i${postID}`);
+            const postID = link.dataset.post;
+            console.log("Post ID:", postID);
             
             // Wait longer before processing the next backlink
             setTimeout(() => {
-                // Recursively expand quotes in the newly expanded post
-                if (inlinedPost.length) {
-                    expandAllQuotes(inlinedPost);
+                // Find the inlined post
+                const inlinedPost = $(`#i${postID}`);
+                console.log("Inlined post found:", inlinedPost.length > 0);
+                
+                if (inlinedPost.length > 0) {
+                    // Process images in the inlined post
+                    try {
+                        // Find all images in the inlined post
+                        const images = inlinedPost.find('img.post_image');
+                        console.log("Found images:", images.length);
+                        
+                        // Process each image
+                        images.each(function() {
+                            const img = $(this);
+                            const src = img.data('src') || img.attr('src');
+                            
+                            // If using data-src (lazy loading), set the src attribute
+                            if (img.data('src') && !img.attr('src')) {
+                                img.attr('src', src);
+                            }
+                            
+                            // If we have settings for inline images, apply them
+                            if (settings.UserSettings.inlineImages && 
+                                settings.UserSettings.inlineImages.value) {
+                                
+                                // Replace thumbnail with full image if not using delayed load
+                                if (!settings.UserSettings.inlineImages.suboptions.delayedLoad.value) {
+                                    // Get the full image URL
+                                    const fullSrc = src.replace('thumb/', '').replace('s.jpg', '.jpg');
+                                    
+                                    // Create a new image to preload
+                                    const fullImg = new Image();
+                                    fullImg.onload = function() {
+                                        img.attr('src', fullSrc);
+                                        console.log("Loaded full image:", fullSrc);
+                                    };
+                                    fullImg.src = fullSrc;
+                                }
+                            }
+                        });
+                        
+                        // If there's a function to inline images, call it
+                        if (typeof inlineImages === 'function') {
+                            inlineImages(inlinedPost);
+                            console.log("Called inlineImages function");
+                        }
+                    } catch (imgError) {
+                        console.error("Error processing images:", imgError);
+                    }
                 }
                 
                 // Process the next backlink with a delay
                 setTimeout(processNextBacklink, 500);
-            }, 300);
+            }, 1000);
         } catch (error) {
             console.error("Error expanding quote:", error);
             // Continue with the next one even if there was an error
@@ -4586,3 +4645,293 @@ function expandAllQuotes(postElement) {
     // Start processing backlinks
     processNextBacklink();
 }
+
+// Define clickHandler as a global variable at the top of the script
+var clickHandler;
+
+// Then in the document ready function, find where the click handler is defined
+// and modify it to assign to our global variable
+$(function() {
+    // ... existing code ...
+    
+    // Find the existing click handler for backlinks
+    $(document).on('click', '.backlink', function(e) {
+        // Store this function as the global clickHandler
+        clickHandler = function(e, called = false) {
+            console.warn(e, called);
+            
+            // The rest of your existing click handler code
+            if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
+                // ... existing code ...
+            }
+            // ... rest of function ...
+        };
+        
+        // Call the function for the current click
+        clickHandler(e, false);
+        
+        // Prevent default if needed
+        // ... existing code ...
+    });
+    
+    // ... rest of document ready function ...
+});
+
+// Then modify the expandAllQuotes function to handle errors better
+function expandAllQuotes(postElement) {
+    console.log("Starting expandAllQuotes on", postElement);
+    
+    // Find all backlinks in the post that haven't been expanded yet
+    const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    console.log("Found backlinks:", backlinks.length);
+    
+    if (backlinks.length === 0) {
+        console.log("No backlinks to expand");
+        return; // No more backlinks to expand
+    }
+    
+    // Process each backlink with a delay between clicks
+    let index = 0;
+    
+    function processNextBacklink() {
+        if (index >= backlinks.length) {
+            console.log("All backlinks processed");
+            return; // All done
+        }
+        
+        const link = backlinks[index];
+        console.log("Processing backlink", index, link);
+        index++;
+        
+        try {
+            // Check if clickHandler is defined
+            if (typeof clickHandler !== 'function') {
+                console.error("clickHandler is not defined - trying to find it");
+                
+                // Try to find the click handler function
+                clickHandler = function(e, called = false) {
+                    console.log("Using fallback clickHandler");
+                    // Simulate a click on the backlink
+                    $(e.target).trigger('click');
+                };
+                
+                setTimeout(processNextBacklink, 500);
+                return;
+            }
+            
+            // Create a simulated click event
+            const event = {
+                target: link,
+                originalEvent: { ctrlKey: false },
+                which: 1,
+                preventDefault: () => {}
+            };
+            
+            // Call the click handler
+            console.log("Calling clickHandler");
+            clickHandler(event, true);
+            
+            // Get the post ID from the link
+            const postID = link.dataset.post;
+            console.log("Post ID:", postID);
+            
+            // Wait longer before processing the next backlink
+            setTimeout(() => {
+                // Find the inlined post
+                const inlinedPost = $(`#i${postID}`);
+                console.log("Inlined post found:", inlinedPost.length > 0);
+                
+                // Process the next backlink with a delay
+                setTimeout(processNextBacklink, 500);
+            }, 1000);
+        } catch (error) {
+            console.error("Error expanding quote:", error);
+            // Continue with the next one even if there was an error
+            setTimeout(processNextBacklink, 500);
+        }
+    }
+    
+    // Start processing backlinks
+    processNextBacklink();
+}
+
+// Fix the clickHandler definition to properly handle the existing function
+// Add this at the top of your script, after variable declarations
+var clickHandler;
+
+$(function() {
+    // Capture the existing click handler for backlinks
+    const originalBacklinkHandler = $('.backlink').prop('onclick');
+    
+    // Define our global clickHandler that will be used by expandAllQuotes
+    clickHandler = function(e, called = false) {
+        try {
+            console.log("clickHandler called", e.target);
+            
+            // If it's a backlink and inline replies are enabled
+            if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
+                e.preventDefault();
+                
+                const $this = $(e.target);
+                const board = $this.data('board');
+                const post = $this.data('post');
+                
+                // Check if already inlined
+                if ($this.hasClass('inlined')) {
+                    // Toggle visibility of inlined post
+                    $(`#i${post}`).toggle();
+                    return;
+                }
+                
+                // Mark as inlined
+                $this.addClass('inlined');
+                
+                // Create container for inlined post
+                const $container = $('<div class="inlined-post-container"></div>');
+                $this.after($container);
+                
+                // Fetch the post content
+                $.ajax({
+                    url: `/${board}/post/${post}`,
+                    dataType: 'html',
+                    success: function(data) {
+                        // Process the fetched post
+                        const $post = $(data).find(`#p${post}`);
+                        if ($post.length) {
+                            $container.html($post);
+                            
+                            // Process images in the inlined post
+                            setTimeout(function() {
+                                if (typeof inlineImages === 'function') {
+                                    inlineImages($container);
+                                }
+                            }, 100);
+                        }
+                    },
+                    error: function() {
+                        $container.html('<div class="error">Failed to load post</div>');
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Error in clickHandler:", error);
+        }
+    };
+    
+    // Override the click handler for backlinks
+    $(document).on('click', '.backlink', function(e) {
+        clickHandler(e, false);
+    });
+});
+
+// Improved expandAllQuotes function with better image handling
+function expandAllQuotes(postElement) {
+    console.log("Starting expandAllQuotes on", postElement);
+    
+    // Find all backlinks in the post that haven't been expanded yet
+    const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    console.log("Found backlinks:", backlinks.length);
+    
+    if (backlinks.length === 0) {
+        console.log("No backlinks to expand");
+        return; // No more backlinks to expand
+    }
+    
+    // Process each backlink with a delay between clicks
+    let index = 0;
+    
+    function processNextBacklink() {
+        if (index >= backlinks.length) {
+            console.log("All backlinks processed");
+            return; // All done
+        }
+        
+        const link = backlinks[index];
+        console.log("Processing backlink", index, link);
+        index++;
+        
+        try {
+            // Skip if already processed
+            if ($(link).hasClass('inlined')) {
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+            
+            // Get the post data
+            const board = $(link).data('board');
+            const post = $(link).data('post');
+            
+            if (!board || !post) {
+                console.error("Missing data attributes on backlink", link);
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+            
+            // Mark as inlined to prevent duplicate processing
+            $(link).addClass('inlined');
+            
+            // Create container for inlined post
+            const $container = $('<div class="inlined-post-container" id="i' + post + '"></div>');
+            $(link).after($container);
+            
+            // Fetch the post content directly
+            $.ajax({
+                url: `/${board}/post/${post}`,
+                dataType: 'html',
+                success: function(data) {
+                    // Process the fetched post
+                    const $post = $(data).find(`#p${post}`);
+                    if ($post.length) {
+                        $container.html($post);
+                        
+                        // Process images in the inlined post
+                        setTimeout(function() {
+                            if (typeof inlineImages === 'function') {
+                                inlineImages($container);
+                            }
+                            
+                            // Continue with the next backlink after a delay
+                            setTimeout(processNextBacklink, 500);
+                        }, 300);
+                    } else {
+                        $container.html('<div class="error">Post not found</div>');
+                        setTimeout(processNextBacklink, 100);
+                    }
+                },
+                error: function() {
+                    $container.html('<div class="error">Failed to load post</div>');
+                    setTimeout(processNextBacklink, 100);
+                }
+            });
+        } catch (error) {
+            console.error("Error expanding quote:", error);
+            // Continue with the next one even if there was an error
+            setTimeout(processNextBacklink, 500);
+        }
+    }
+    
+    // Start processing backlinks
+    processNextBacklink();
+}
+
+// Fix for image loading issues
+function fixImageLoading() {
+    // Override the default image error handler
+    $('img.post_image').on('error', function() {
+        const img = $(this);
+        const src = img.attr('src');
+        
+        // If the image failed to load, try an alternative source
+        if (src && src.includes('arch-img.b4k.dev')) {
+            // Try loading via a different path
+            const newSrc = src.replace('arch-img.b4k.dev', 'b4k.co/media');
+            console.log(`Image failed to load, trying alternative: ${newSrc}`);
+            img.attr('src', newSrc);
+        }
+    });
+}
+
+// Call the image fix function when the document is ready
+$(function() {
+    fixImageLoading();
+});
