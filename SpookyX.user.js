@@ -95,74 +95,21 @@ function expandAllQuotes(postElement) {
                 return;
             }
 
-            // Get the post data
-            const board = $(link).data('board');
-            const post = $(link).data('post');
-
-            if (!board || !post) {
-                console.error("Missing data attributes on backlink", link);
-                setTimeout(processNextBacklink, 100);
-                return;
-            }
-
+            // Simply click the backlink to trigger its native click handler
+            console.log("Clicking backlink:", link);
+            $(link).click();
+            
             // Mark as inlined to prevent duplicate processing
             $(link).addClass('inlined');
-
-            // Create container for inlined post
-            const $container = $('<div class="inlined-post-container" id="i' + post + '"></div>');
-            $(link).after($container);
-
-            // Add a loading indicator
-            $container.html('<div class="loading">Loading post...</div>');
-
-            // Use a longer delay between requests to avoid rate limiting
-            const requestDelay = 2000; // 2 seconds between requests
-
-            // Fetch the post content with retry logic
-            setTimeout(() => {
-                $.ajax({
-                    url: `/${board}/post/${post}`,
-                    dataType: 'html',
-                    timeout: 10000, // 10 second timeout
-                    success: function(data) {
-                        // Process the fetched post
-                        const $post = $(data).find(`#p${post}`);
-                        if ($post.length) {
-                            $container.html($post);
-
-                            // Process images in the inlined post
-                            setTimeout(function() {
-                                if (typeof inlineImages === 'function') {
-                                    inlineImages($container);
-                                }
-
-                                // Continue with the next backlink after a delay
-                                setTimeout(processNextBacklink, 1000);
-                            }, 500);
-                        } else {
-                            $container.html('<div class="error">Post not found</div>');
-                            setTimeout(processNextBacklink, 1000);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        // Handle specific error codes
-                        if (xhr.status === 403) {
-                            $container.html('<div class="error">Access forbidden (403). Server may be rate limiting requests.</div>');
-                            console.warn(`403 Forbidden error when fetching post ${post} on board ${board}`);
-
-                            // Add a longer delay before the next request when we hit a 403
-                            setTimeout(processNextBacklink, 5000);
-                        } else {
-                            $container.html(`<div class="error">Failed to load post: ${xhr.status} ${error}</div>`);
-                            setTimeout(processNextBacklink, 1000);
-                        }
-                    }
-                });
-            }, requestDelay);
+            
+            // Continue with the next backlink after a delay
+            // Use a longer delay to avoid overwhelming the browser
+            setTimeout(processNextBacklink, 500);
+            
         } catch (error) {
-            console.error("Error expanding quote:", error);
+            console.error("Error clicking backlink:", error);
             // Continue with the next one even if there was an error
-            setTimeout(processNextBacklink, 1000);
+            setTimeout(processNextBacklink, 500);
         }
     }
 
