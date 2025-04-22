@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4X Extension</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      width: 250px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    
+    .container {
+      padding: 15px;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      color: #444;
+    }
+    
+    .version {
+      font-size: 12px;
+      color: #888;
+    }
+    
+    .status {
+      margin-bottom: 15px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .status-info {
+      background-color: #e8f4fd;
+      color: #0078d7;
+    }
+    
+    .status-success {
+      background-color: #dff6dd;
+      color: #107c10;
+    }
+    
+    .status-warning {
+      background-color: #fff4ce;
+      color: #9d5d00;
+    }
+    
+    .status-error {
+      background-color: #fde7e9;
+      color: #a80000;
+    }
+    
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    button {
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      padding: 10px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+    
+    button:hover {
+      background-color: #0063ad;
+    }
+    
+    button.secondary {
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+    
+    button.secondary:hover {
+      background-color: #e0e0e0;
+    }
+    
+    button.disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    
+    button.disabled:hover {
+      background-color: #ccc;
+    }
+    
+    .footer {
+      margin-top: 15px;
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+  </style>
+  <script src="js/popup.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>4X Extension</h1>
+      <span id="version-text" class="version">v0.0.0</span>
+    </div>
+    
+    <div id="status-text" class="status status-info">
+      Checking extension status...
+    </div>
+    
+    <div class="button-group">
+      <button id="settings-btn">Open Settings Panel</button>
+      <button id="clear-cache-btn" class="secondary">Clear Post Cache</button>
+    </div>
+    
+    <div class="footer">
+      Enhanced browsing for archive sites
+    </div>
+  </div>
+</body>
+</html> 

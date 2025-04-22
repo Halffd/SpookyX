@@ -1,0 +1,93 @@
+{
+  "manifest_version": 3,
+  "name": "4X",
+  "version": "32.50",
+  "description": "Enhances functionality of FoolFuuka boards. Developed for more comfortable browsing on archive sites.",
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "images/icon16.png",
+      "24": "images/icon24.png",
+      "32": "images/icon32.png"
+    },
+    "default_title": "4X",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://archive.4plebs.org/*",
+    "*://archive.loveisover.me/*",
+    "*://archive.nyafuu.org/*",
+    "*://desuarchive.org/*",
+    "*://cuckchan.org/*",
+    "*://4ch.be/*",
+    "*://archive.palanq.win/*",
+    "*://*.ch.archive.horse/*",
+    "*://boards.fireden.net/*",
+    "*://archived.moe/*",
+    "*://archiveofsins.com/*",
+    "*://thebarchive.com/*",
+    "*://archive.whatisthisimnotgoodwithcomputers.com/*",
+    "*://magyarchan.net/*",
+    "*://www.tokyochronos.net/*",
+    "*://arch.b4k.co/*",
+    "*://old.sage.moe/*",
+    "*://arch.b4k.dev/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://archive.4plebs.org/*",
+        "*://archive.loveisover.me/*",
+        "*://archive.nyafuu.org/*",
+        "*://desuarchive.org/*",
+        "*://cuckchan.org/*",
+        "*://4ch.be/*",
+        "*://archive.palanq.win/*",
+        "*://*.ch.archive.horse/*",
+        "*://boards.fireden.net/*",
+        "*://archived.moe/*",
+        "*://archiveofsins.com/*",
+        "*://thebarchive.com/*",
+        "*://archive.whatisthisimnotgoodwithcomputers.com/*",
+        "*://magyarchan.net/*",
+        "*://www.tokyochronos.net/*",
+        "*://arch.b4k.co/*",
+        "*://old.sage.moe/*",
+        "*://arch.b4k.dev/*"
+      ],
+      "js": [
+        "lib/jquery.min.js",
+        "lib/jquery.selection.js",
+        "lib/jquery.mousewheel.min.js",
+        "lib/colz.class.min.js",
+        "js/modules/utils.js",
+        "js/modules/settings.js",
+        "js/modules/api.js",
+        "js/modules/posts.js",
+        "js/modules/ui.js",
+        "js/modules/observer.js",
+        "js/content.js"
+      ],
+      "css": ["css/main.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["images/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "options_page": "options.html"
+} 

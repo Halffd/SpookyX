@@ -66,19 +66,331 @@ const delay = (ms) => {
 function expandAllQuotes(postElement) {
     console.log("Starting expandAllQuotes on", postElement);
 
+    // Create a container at the bottom of the post for expanded posts
+    const $postContainer = $(postElement).closest('.post_wrapper');
+    const $expandedContainer = $('<div class="expanded-posts-container"></div>');
+    $expandedContainer.css({
+        'border': '2px solid #773311',
+        'padding': '10px',
+        'margin-top': '20px',
+        'background-color': 'rgba(0, 0, 0, 0.05)'
+    });
+
+    // Add a header to the container
+    const $header = $('<div class="expanded-posts-header"></div>');
+    $header.html('<h3>Expanded Posts</h3>');
+    $header.css({
+        'font-weight': 'bold',
+        'margin-bottom': '10px',
+        'padding-bottom': '5px',
+        'border-bottom': '1px solid #773311'
+    });
+
+    // Add a close button
+    const $closeButton = $('<button class="close-expanded-posts">Close</button>');
+    $closeButton.css({
+        'float': 'right',
+        'border-radius': '5px',
+        'color': 'white',
+        'background': '#553311',
+        'padding': '2px 8px'
+    });
+    $closeButton.click(function() {
+        $expandedContainer.remove();
+    });
+
+    $header.prepend($closeButton);
+    $expandedContainer.append($header);
+
+    // Add the container to the bottom of the post
+    $postContainer.append($expandedContainer);
+
     // Find all backlinks in the post that haven't been expanded yet
-    const backlinks = $(postElement).find('.backlink:not(.inlined)').toArray();
+    const backlinks = $(postElement).find('.backlink:not(.expanded-bottom)').toArray();
     console.log("Found backlinks:", backlinks.length);
 
     if (backlinks.length === 0) {
         console.log("No backlinks to expand");
+        $expandedContainer.append('<div class="no-backlinks">No backlinks found to expand</div>');
         return; // No more backlinks to expand
     }
 
-    // Process each backlink with a delay between clicks
-    let index = 0;
+    // Keep track of posts we've already processed
+    let processedPosts = new Set();
 
-    function processNextBacklink() {
+    // Process each backlink with a delay between fetches
+    let index = 0;
+    let processedCount = 0;
+
+    // Add a status indicator that updates as posts are processed
+    const $status = $('<div class="expanded-posts-status"></div>');
+    $status.css({
+        'margin-top': '10px',
+        'font-style': 'italic'
+    });
+    $expandedContainer.append($status);
+
+    // Update the status periodically
+    const statusInterval = setInterval(() => {
+        $status.text(`Processed ${processedCount} of ${backlinks.length} posts`);
+
+        if (processedCount >= backlinks.length) {
+            clearInterval(statusInterval);
+            $status.text(`Completed: ${processedCount} posts expanded`);
+        }
+    }, 500);
+
+    // Define fetchAndProcessPost function inline to ensure it's available
+    async function fetchAndProcessPost(board, postId, $placeholder) {
+        console.log(`Fetching and processing post ${board}:${postId}`);
+
+        try {
+            // Add a loading indicator
+            $placeholder.html(`<div class="loading">Loading post ${postId}...</div>`);
+
+            // Check if the post is already in the cache
+            if (typeof backend_vars !== 'undefined' &&
+                typeof backend_vars.loaded_posts !== 'undefined' &&
+                typeof backend_vars.loaded_posts[board + ':' + postId] !== 'undefined') {
+
+                if (backend_vars.loaded_posts[board + ':' + postId] === false) {
+                    // Post doesn't exist
+                    $placeholder.html('<div class="error">Post not found in cache</div>');
+                    return;
+                }
+
+                // Use the cached post data
+                const data = backend_vars.loaded_posts[board + ':' + postId];
+
+                // If we have formatted HTML, use it directly
+                if (data.formatted) {
+                    $placeholder.html(data.formatted);
+                } else {
+                    // Otherwise, create a post element manually
+                    const postElement = document.createElement('article');
+                    postElement.classList.add('post');
+
+                    // Add post header with author and timestamp if available
+                    const headerElement = document.createElement('header');
+                    const postDataElement = document.createElement('div');
+                    postDataElement.classList.add('post_data');
+
+                    // Add author if available
+                    if (data.name || data.name_processed) {
+                        const authorElement = document.createElement('span');
+                        authorElement.classList.add('post_author');
+                        authorElement.textContent = data.name_processed || data.name || 'Anonymous';
+                        postDataElement.appendChild(authorElement);
+                    }
+
+                    // Add timestamp if available
+                    if (data.timestamp) {
+                        const timestampElement = document.createElement('span');
+                        timestampElement.classList.add('time_wrap');
+                        const time = document.createElement('time');
+                        time.setAttribute('datetime', new Date(data.timestamp * 1000).toISOString());
+                        time.textContent = new Date(data.timestamp * 1000).toLocaleString();
+                        timestampElement.appendChild(time);
+                        postDataElement.appendChild(timestampElement);
+                    }
+
+                    headerElement.appendChild(postDataElement);
+                    postElement.appendChild(headerElement);
+
+                    // Add post content
+                    const contentElement = document.createElement('div');
+                    contentElement.classList.add('text');
+
+                    // Use the first available content field
+                    const content = data.comment_processed || data.com || data.comment || data.content || 'No content available';
+                    contentElement.innerHTML = content;
+
+                    postElement.appendChild(contentElement);
+
+                    // Add the post to the placeholder
+                    $placeholder.html(postElement);
+
+                    // Add image if available
+                    if (data.media && data.media.media_link) {
+                        try {
+                            console.log("Adding image from:", data.media.media_link);
+
+                            // Create image container
+                            const imageBox = document.createElement('div');
+                            imageBox.classList.add('thread_image_box');
+
+                            // Create image element
+                            const imageElement = document.createElement('img');
+                            imageElement.src = data.media.media_link;
+                            imageElement.classList.add('post-image');
+                            imageElement.style.width = 'auto';
+                            imageElement.style.maxWidth = '100%';
+                            imageElement.style.height = 'auto';
+                            imageElement.style.maxHeight = '500px';
+                            imageElement.style.display = 'block';
+
+                            // Add error handling for the image
+                            imageElement.onerror = function() {
+                                console.error('Image failed to load:', data.media.media_link);
+
+                                // Try alternative URLs if the original fails
+                                const originalSrc = data.media.media_link;
+                                let newSrc = originalSrc;
+
+                                // Try different domain variations
+                                if (originalSrc.includes('arch-img.b4k.dev')) {
+                                    newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                                } else if (originalSrc.includes('is2.4chan.org')) {
+                                    newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                                } else if (originalSrc.includes('is.4chan.org')) {
+                                    newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                                }
+
+                                if (newSrc !== originalSrc) {
+                                    console.log('Trying alternative image source:', newSrc);
+                                    this.src = newSrc;
+                                }
+                            };
+
+                            // Add the image to the container
+                            imageBox.appendChild(imageElement);
+
+                            // Insert the image container before the text
+                            const textElement = $placeholder.find('.text')[0];
+                            if (textElement) {
+                                textElement.parentNode.insertBefore(imageBox, textElement);
+                            } else {
+                                $placeholder.prepend(imageBox);
+                            }
+
+                            console.log("Image element added to post");
+                        } catch (error) {
+                            console.error('Error creating image element:', error);
+                        }
+                    }
+                }
+
+                // Process images in the post
+                if (typeof inlineImages === 'function') {
+                    setTimeout(() => {
+                        inlineImages($placeholder);
+                    }, 100);
+                }
+
+                return;
+            }
+
+            // Fetch the post data
+            const repliesUrl = `${backend_vars.api_url}_/api/chan/post/`;
+            const requestData = { board, num: postId };
+
+            try {
+                const response = await jQuery.ajax({
+                    url: repliesUrl,
+                    type: 'GET',
+                    data: requestData,
+                    dataType: 'json',
+                    timeout: 15000, // 15 second timeout
+                    beforeSend: function(xhr) {
+                        // Add headers that might help prevent 403 errors
+                        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+                        // Set a proper referer if possible
+                        const currentUrl = window.location.href;
+                        if (currentUrl) {
+                            xhr.setRequestHeader('Referer', currentUrl);
+                        }
+                    }
+                });
+
+                if (response.error) {
+                    $placeholder.html(`<div class="error">Error fetching post: ${response.error}</div>`);
+                    return;
+                }
+
+                // Process the post data
+                if (response.formatted) {
+                    $placeholder.html(response.formatted);
+                } else {
+                    // Create a basic post structure
+                    const postElement = $('<article class="post"></article>');
+
+                    // Add post content
+                    const contentElement = $('<div class="text"></div>');
+
+                    // Use the first available content field
+                    const content = response.comment_processed || response.com || response.comment || response.content || 'No content available';
+                    contentElement.html(content);
+
+                    postElement.append(contentElement);
+
+                    // Add the post to the placeholder
+                    $placeholder.html(postElement);
+
+                    // Add image if available
+                    if (response.media && response.media.media_link) {
+                        const imageBox = $('<div class="thread_image_box"></div>');
+                        const imageElement = $('<img>')
+                            .attr('src', response.media.media_link)
+                            .css({
+                                'width': 'auto',
+                                'max-width': '100%',
+                                'height': 'auto',
+                                'max-height': '500px',
+                                'display': 'block'
+                            })
+                            .addClass('post-image');
+
+                        // Add error handling for the image
+                        imageElement.on('error', function() {
+                            console.error('Image failed to load:', response.media.media_link);
+
+                            // Try alternative URLs if the original fails
+                            const originalSrc = response.media.media_link;
+                            let newSrc = originalSrc;
+
+                            // Try different domain variations
+                            if (originalSrc.includes('arch-img.b4k.dev')) {
+                                newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                            } else if (originalSrc.includes('is2.4chan.org')) {
+                                newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                            } else if (originalSrc.includes('is.4chan.org')) {
+                                newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                            }
+
+                            if (newSrc !== originalSrc) {
+                                console.log('Trying alternative image source:', newSrc);
+                                $(this).attr('src', newSrc);
+                            }
+                        });
+
+                        imageBox.append(imageElement);
+                        $placeholder.prepend(imageBox);
+                    }
+                }
+
+                // Process images in the post
+                if (typeof inlineImages === 'function') {
+                    setTimeout(() => {
+                        inlineImages($placeholder);
+                    }, 100);
+                }
+
+                // Cache the post data for future use
+                if (typeof backend_vars !== 'undefined' && typeof backend_vars.loaded_posts !== 'undefined') {
+                    backend_vars.loaded_posts[board + ':' + postId] = response;
+                }
+            } catch (error) {
+                console.error(`Error fetching post ${board}:${postId}:`, error);
+                $placeholder.html(`<div class="error">Error: ${error.message || 'Unknown error'}</div>`);
+            }
+        } catch (error) {
+            console.error(`Error processing post ${board}:${postId}:`, error);
+            $placeholder.html(`<div class="error">Error: ${error.message || 'Unknown error'}</div>`);
+        }
+    }
+
+    async function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
@@ -90,24 +402,103 @@ function expandAllQuotes(postElement) {
 
         try {
             // Skip if already processed
-            if ($(link).hasClass('inlined')) {
+            if ($(link).hasClass('expanded-bottom')) {
                 setTimeout(processNextBacklink, 100);
                 return;
             }
 
-            // Simply click the backlink to trigger its native click handler
-            console.log("Clicking backlink:", link);
-            $(link).click();
-            
-            // Mark as inlined to prevent duplicate processing
-            $(link).addClass('inlined');
-            
-            // Continue with the next backlink after a delay
-            // Use a longer delay to avoid overwhelming the browser
-            setTimeout(processNextBacklink, 500);
-            
+            // Mark as expanded to prevent duplicate processing
+            $(link).addClass('expanded-bottom');
+
+            const $link = $(link);
+            const board = $link.data('board');
+            const postId = $link.data('post');
+
+            if (!board || !postId) {
+                console.error("Missing data attributes on backlink", link);
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+
+            // Add this post to our processed set
+            const postKey = `${board}:${postId}`;
+            if (processedPosts.has(postKey)) {
+                console.log(`Post ${postKey} already processed, skipping`);
+                setTimeout(processNextBacklink, 100);
+                return;
+            }
+
+            processedPosts.add(postKey);
+
+            // Create a placeholder for this post
+            const $postPlaceholder = $('<div class="expanded-post" id="expanded-' + postId + '"></div>');
+            $postPlaceholder.css({
+                'margin-bottom': '15px',
+                'padding': '10px',
+                'border-left': '3px solid #773311'
+            });
+            $postPlaceholder.html('<div class="loading">Loading post ' + postId + '...</div>');
+            $expandedContainer.append($postPlaceholder);
+
+            // Check if the post is already on the page
+            if ($('#p' + postId).length > 0 || $('#' + postId).length > 0) {
+                // Clone the existing post
+                const $existingPost = $('#p' + postId).length > 0 ? $('#p' + postId) : $('#' + postId);
+                const $clonedPost = $existingPost.clone();
+
+                // Update the placeholder with the cloned post
+                $postPlaceholder.html($clonedPost.show());
+
+                // Process images in the cloned post
+                if (typeof inlineImages === 'function') {
+                    setTimeout(() => {
+                        inlineImages($postPlaceholder);
+                    }, 100);
+                }
+
+                processedCount++;
+
+                // Continue with the next backlink without waiting
+                setTimeout(processNextBacklink, 100);
+            }
+            // Check if the post is in the backend_vars.loaded_posts
+            else if (typeof backend_vars !== 'undefined' &&
+                     typeof backend_vars.loaded_posts !== 'undefined' &&
+                     typeof backend_vars.loaded_posts[board + ':' + postId] !== 'undefined') {
+
+                if (backend_vars.loaded_posts[board + ':' + postId] === false) {
+                    // Post doesn't exist
+                    $postPlaceholder.html('<div class="error">Post not found</div>');
+                } else {
+                    // Use the cached post data
+                    const data = backend_vars.loaded_posts[board + ':' + postId];
+                    $postPlaceholder.html(data.formatted);
+
+                    // Process images
+                    if (typeof inlineImages === 'function') {
+                        setTimeout(() => {
+                            inlineImages($postPlaceholder);
+                        }, 100);
+                    }
+                }
+
+                processedCount++;
+
+                // Continue with the next backlink without waiting
+                setTimeout(processNextBacklink, 100);
+            }
+            // Otherwise, fetch the post
+            else {
+                await fetchAndProcessPost(board, postId, $postPlaceholder);
+
+                // Increment the processed count
+                processedCount++;
+
+                // Continue with the next backlink after a delay
+                setTimeout(processNextBacklink, 500);
+            }
         } catch (error) {
-            console.error("Error clicking backlink:", error);
+            console.error("Error expanding post:", error);
             // Continue with the next one even if there was an error
             setTimeout(processNextBacklink, 500);
         }
@@ -256,14 +647,14 @@ function generatePost(postData) {
 }
 const generatePostElem = async (postData) => {
     var postElement = generatePost(postData);
-    
+
     console.log("generatePostElem - postData:", postData);
-    
+
     // Check if postData and media exist before trying to access them
     if (postData && postData.media && postData.media.media_link) {
         try {
             console.log("Attempting to load image from:", postData.media.media_link);
-            
+
             // Create the image element directly without trying to fetch via proxy
             var imageElement = $('<img>')
                 .attr('src', postData.media.media_link)
@@ -275,15 +666,15 @@ const generatePostElem = async (postData) => {
                     'display': 'block'
                 })
                 .addClass('post-image');
-            
+
             // Add error handling for the image
             imageElement.on('error', function() {
                 console.error('Image failed to load:', postData.media.media_link);
-                
+
                 // Try alternative URLs if the original fails
                 const originalSrc = postData.media.media_link;
                 let newSrc = originalSrc;
-                
+
                 // Try different domain variations
                 if (originalSrc.includes('arch-img.b4k.dev')) {
                     newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -292,17 +683,17 @@ const generatePostElem = async (postData) => {
                 } else if (originalSrc.includes('is.4chan.org')) {
                     newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
                 }
-                
+
                 if (newSrc !== originalSrc) {
                     console.log('Trying alternative image source:', newSrc);
                     $(this).attr('src', newSrc);
                 }
             });
-            
+
             // Add the image container and image
             let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
-            postElement.find('.thread_image_box').prepend(imageElement);
-            
+                postElement.find('.thread_image_box').prepend(imageElement);
+
             console.log("Image element added to post:", imageElement);
         } catch (error) {
             console.error('Error creating image element:', error);
@@ -311,7 +702,7 @@ const generatePostElem = async (postData) => {
         // Handle case where media_link is directly on postData (different structure)
         try {
             console.log("Attempting to load image from direct media_link:", postData.media_link);
-            
+
             var imageElement = $('<img>')
                 .attr('src', postData.media_link)
                 .css({
@@ -322,15 +713,15 @@ const generatePostElem = async (postData) => {
                     'display': 'block'
                 })
                 .addClass('post-image');
-            
+
             // Add error handling for the image
             imageElement.on('error', function() {
                 console.error('Image failed to load:', postData.media_link);
-                
+
                 // Try alternative URLs if the original fails
                 const originalSrc = postData.media_link;
                 let newSrc = originalSrc;
-                
+
                 // Try different domain variations
                 if (originalSrc.includes('arch-img.b4k.dev')) {
                     newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -339,17 +730,17 @@ const generatePostElem = async (postData) => {
                 } else if (originalSrc.includes('is.4chan.org')) {
                     newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
                 }
-                
+
                 if (newSrc !== originalSrc) {
                     console.log('Trying alternative image source:', newSrc);
                     $(this).attr('src', newSrc);
                 }
             });
-            
+
             // Add the image container and image
             let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
             postElement.find('.thread_image_box').prepend(imageElement);
-            
+
             console.log("Image element added to post:", imageElement);
         } catch (error) {
             console.error('Error creating image element:', error);
@@ -358,7 +749,7 @@ const generatePostElem = async (postData) => {
         // Handle case where image_src is directly on postData (different structure)
         try {
             console.log("Attempting to load image from image_src:", postData.image_src);
-            
+
             var imageElement = $('<img>')
                 .attr('src', postData.image_src)
                 .css({
@@ -369,15 +760,15 @@ const generatePostElem = async (postData) => {
                     'display': 'block'
                 })
                 .addClass('post-image');
-            
+
             // Add error handling for the image
             imageElement.on('error', function() {
                 console.error('Image failed to load:', postData.image_src);
-                
+
                 // Try alternative URLs if the original fails
                 const originalSrc = postData.image_src;
                 let newSrc = originalSrc;
-                
+
                 // Try different domain variations
                 if (originalSrc.includes('arch-img.b4k.dev')) {
                     newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
@@ -386,17 +777,17 @@ const generatePostElem = async (postData) => {
                 } else if (originalSrc.includes('is.4chan.org')) {
                     newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
                 }
-                
+
                 if (newSrc !== originalSrc) {
                     console.log('Trying alternative image source:', newSrc);
                     $(this).attr('src', newSrc);
                 }
             });
-            
+
             // Add the image container and image
             let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
             postElement.find('.thread_image_box').prepend(imageElement);
-            
+
             console.log("Image element added to post:", imageElement);
         } catch (error) {
             console.error('Error creating image element:', error);
@@ -404,19 +795,19 @@ const generatePostElem = async (postData) => {
     } else {
         // Check if there's an image in the HTML structure already
         console.log("No media information in postData, checking for existing images");
-        
+
         // Look for existing images in the post HTML
         const existingImages = postElement.find('img.post_image, img.smallImage, img.thread_image');
         if (existingImages.length > 0) {
             console.log("Found existing images in post HTML:", existingImages.length);
-            
+
             // Clone the first image and add it to the thread_image_box
             const firstImage = existingImages.first();
             const imageSrc = firstImage.attr('src') || firstImage.data('src');
-            
+
             if (imageSrc) {
                 console.log("Using existing image source:", imageSrc);
-                
+
                 var imageElement = $('<img>')
                     .attr('src', imageSrc)
                     .css({
@@ -427,18 +818,18 @@ const generatePostElem = async (postData) => {
                         'display': 'block'
                     })
                     .addClass('post-image');
-                
+
                 // Add the image container and image
                 let cont = postElement.find('.text').before('<div class="thread_image_box"></div>');
                 postElement.find('.thread_image_box').prepend(imageElement);
-                
+
                 console.log("Existing image added to post:", imageElement);
             }
         } else {
             console.warn("No image found in post data or HTML");
         }
     }
-    
+
     return postElement;
 }
 var ops = []
@@ -447,38 +838,38 @@ var postsObj = {}
 // Function to get operation by opsId
 const fetchOp = async (id) => {
     console.log("fetchOp called with id:", id);
-    
+
     // Create an object to map opsId to ops
     const opsMap = opsId.reduce((acc, id, index) => {
         acc[id] = ops[index];
         return acc;
     }, {});
-    
+
     // Get the OP data
     const opData = opsMap[id];
     console.log("OP data found:", opData);
-    
+
     // If we're on a search page, we might need to extract the image from the DOM
     if (search && (!opData || !opData.media)) {
         console.log("On search page, trying to extract image from DOM");
-        
+
         // Try to find the post in the DOM
         const postElement = $(`#${id}`);
         if (postElement.length > 0) {
             console.log("Found post element in DOM:", postElement);
-            
+
             // Look for images in the post
             const images = postElement.find('img.post_image, img.smallImage, img.thread_image');
             if (images.length > 0) {
                 console.log("Found images in post:", images.length);
-                
+
                 // Get the first image source
                 const firstImage = images.first();
                 const imageSrc = firstImage.attr('src') || firstImage.data('src');
-                
+
                 if (imageSrc) {
                     console.log("Found image source:", imageSrc);
-                    
+
                     // If we have opData, add the image to it
                     if (opData) {
                         if (!opData.media) {
@@ -494,25 +885,25 @@ const fetchOp = async (id) => {
                             thread_num: postElement.data('thread-num') || '0',
                             num: id
                         };
-                        
+
                         // Add the text content if available
                         const textElement = postElement.find('.text');
                         if (textElement.length > 0) {
                             newOpData.comment_processed = textElement.html();
                         }
-                        
+
                         return await generatePostElem(newOpData);
                     }
                 }
             }
         }
     }
-    
+
     // If we have opData, generate the post element
     if (opData) {
         return await generatePostElem(opData);
     }
-    
+
     console.warn("No OP data found for id:", id);
     return '';
 };
@@ -526,11 +917,11 @@ const fetchData = async (url, data) => {
     let retryDelay = 2000; // Start with 2 seconds delay
 
     while (retryCount < maxRetries) {
-        try {
-            const result = await jQuery.ajax({
-                url,
-                type: 'GET',
-                data,
+    try {
+        const result = await jQuery.ajax({
+            url,
+            type: 'GET',
+            data,
                 dataType: 'json',
                 timeout: 15000, // 15 second timeout
                 beforeSend: function(xhr) {
@@ -543,14 +934,14 @@ const fetchData = async (url, data) => {
                         xhr.setRequestHeader('Referer', currentUrl);
                     }
                 }
-            });
+        });
 
-            if (result.error) {
-                throw new Error(result.error);
-            }
+        if (result.error) {
+            throw new Error(result.error);
+        }
 
-            return result; // Assuming result is the desired response
-        } catch (error) {
+        return result; // Assuming result is the desired response
+    } catch (error) {
             // Check if it's a 403 error or other network error that might benefit from retrying
             if (error.status === 403 || error.status === 429 || error.status === 0) {
                 retryCount++;
@@ -568,8 +959,8 @@ const fetchData = async (url, data) => {
                     throw error;
                 }
             } else {
-                console.error('Error fetching data:', error);
-                throw error;
+        console.error('Error fetching data:', error);
+        throw error;
             }
         }
     }
@@ -600,6 +991,185 @@ const fetchPost = async (board, postId) => {
     const data = { board, num: postId };
     return fetchData(repliesUrl, data);
 };
+
+// Function to fetch and process a post for the expandAllQuotes function
+const fetchAndProcessPost = async (board, postId, $placeholder) => {
+    console.log(`Fetching and processing post ${board}:${postId}`);
+
+    try {
+        // Add a loading indicator
+        $placeholder.html(`<div class="loading">Loading post ${postId}...</div>`);
+
+        // Check if the post is already in the cache
+        if (typeof backend_vars !== 'undefined' &&
+            typeof backend_vars.loaded_posts !== 'undefined' &&
+            typeof backend_vars.loaded_posts[board + ':' + postId] !== 'undefined') {
+
+            if (backend_vars.loaded_posts[board + ':' + postId] === false) {
+                // Post doesn't exist
+                $placeholder.html('<div class="error">Post not found in cache</div>');
+                return;
+            }
+
+            // Use the cached post data
+            const data = backend_vars.loaded_posts[board + ':' + postId];
+            await processPostData(data, $placeholder);
+            return;
+        }
+
+        // Fetch the post data
+        const response = await fetchPost(board, postId);
+
+        if (!response || response.error) {
+            $placeholder.html(`<div class="error">Error fetching post: ${response?.error || 'Unknown error'}</div>`);
+            return;
+        }
+
+        // Process the post data
+        await processPostData(response, $placeholder);
+
+        // Cache the post data for future use
+        if (typeof backend_vars !== 'undefined' && typeof backend_vars.loaded_posts !== 'undefined') {
+            backend_vars.loaded_posts[board + ':' + postId] = response;
+        }
+
+    } catch (error) {
+        console.error(`Error fetching post ${board}:${postId}:`, error);
+        $placeholder.html(`<div class="error">Error: ${error.message}</div>`);
+    }
+};
+
+// Helper function to process post data and update the placeholder
+async function processPostData(data, $placeholder) {
+    console.log("Processing post data:", data);
+
+    try {
+        // Check if we have the post data in the expected format
+        if (!data || (!data.formatted && !data.com && !data.comment && !data.content)) {
+            $placeholder.html('<div class="error">Invalid post data format</div>');
+            return;
+        }
+
+        // If we have formatted HTML, use it directly
+        if (data.formatted) {
+            $placeholder.html(data.formatted);
+        } else {
+            // Otherwise, create a post element manually
+            const postElement = document.createElement('article');
+            postElement.classList.add('post');
+
+            // Add post header with author and timestamp if available
+            const headerElement = document.createElement('header');
+            const postDataElement = document.createElement('div');
+            postDataElement.classList.add('post_data');
+
+            // Add author if available
+            if (data.name || data.name_processed) {
+                const authorElement = document.createElement('span');
+                authorElement.classList.add('post_author');
+                authorElement.textContent = data.name_processed || data.name || 'Anonymous';
+                postDataElement.appendChild(authorElement);
+            }
+
+            // Add timestamp if available
+            if (data.timestamp) {
+                const timestampElement = document.createElement('span');
+                timestampElement.classList.add('time_wrap');
+                const time = document.createElement('time');
+                time.setAttribute('datetime', new Date(data.timestamp * 1000).toISOString());
+                time.textContent = new Date(data.timestamp * 1000).toLocaleString();
+                timestampElement.appendChild(time);
+                postDataElement.appendChild(timestampElement);
+            }
+
+            headerElement.appendChild(postDataElement);
+            postElement.appendChild(headerElement);
+
+            // Add post content
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('text');
+
+            // Use the first available content field
+            const content = data.comment_processed || data.com || data.comment || data.content || 'No content available';
+            contentElement.innerHTML = content;
+
+            postElement.appendChild(contentElement);
+
+            // Add the post to the placeholder
+            $placeholder.html(postElement);
+
+            // Add image if available
+            if (data.media && data.media.media_link) {
+                try {
+                    console.log("Adding image from:", data.media.media_link);
+
+                    // Create image container
+                    const imageBox = document.createElement('div');
+                    imageBox.classList.add('thread_image_box');
+
+                    // Create image element
+                    const imageElement = document.createElement('img');
+                    imageElement.src = data.media.media_link;
+                    imageElement.classList.add('post-image');
+                    imageElement.style.width = 'auto';
+                    imageElement.style.maxWidth = '100%';
+                    imageElement.style.height = 'auto';
+                    imageElement.style.maxHeight = '500px';
+                    imageElement.style.display = 'block';
+
+                    // Add error handling for the image
+                    imageElement.onerror = function() {
+                        console.error('Image failed to load:', data.media.media_link);
+
+                        // Try alternative URLs if the original fails
+                        const originalSrc = data.media.media_link;
+                        let newSrc = originalSrc;
+
+                        // Try different domain variations
+                        if (originalSrc.includes('arch-img.b4k.dev')) {
+                            newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+                        } else if (originalSrc.includes('is2.4chan.org')) {
+                            newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+                        } else if (originalSrc.includes('is.4chan.org')) {
+                            newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+                        }
+
+                        if (newSrc !== originalSrc) {
+                            console.log('Trying alternative image source:', newSrc);
+                            this.src = newSrc;
+                        }
+                    };
+
+                    // Add the image to the container
+                    imageBox.appendChild(imageElement);
+
+                    // Insert the image container before the text
+                    const textElement = $placeholder.find('.text')[0];
+                    if (textElement) {
+                        textElement.parentNode.insertBefore(imageBox, textElement);
+                    } else {
+                        $placeholder.prepend(imageBox);
+                    }
+
+                    console.log("Image element added to post");
+                } catch (error) {
+                    console.error('Error creating image element:', error);
+                }
+            }
+        }
+
+        // Process images in the post
+        if (typeof inlineImages === 'function') {
+            setTimeout(() => {
+                inlineImages($placeholder);
+            }, 100);
+        }
+
+    } catch (error) {
+        console.error("Error processing post data:", error);
+        $placeholder.html(`<div class="error">Error processing post: ${error.message}</div>`);
+    }
+}
 
 // Extract replies in the thread
 const extractReplies = (num, thread) => {
@@ -4932,7 +5502,7 @@ $(document).ready(function () {
                     const url = document.URL;
                     var wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
                     if(url.split('/')[2].includes('b4k')){
-                      wait = 3500
+                      wait = 5000
                     }
 
                     // Sequentially process each post with a delay

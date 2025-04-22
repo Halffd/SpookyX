@@ -1,0 +1,111 @@
+/* SpookyX Extension CSS */
+
+/* Post Styling */
+.expanded-posts-container {
+  border: 2px solid #773311 !important;
+  padding: 10px !important;
+  margin-top: 20px !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.expanded-posts-header {
+  font-weight: bold !important;
+  margin-bottom: 10px !important;
+  padding-bottom: 5px !important;
+  border-bottom: 1px solid #773311 !important;
+}
+
+.close-expanded-posts {
+  float: right !important;
+  border-radius: 5px !important;
+  color: white !important;
+  background: #553311 !important;
+  padding: 2px 8px !important;
+  cursor: pointer !important;
+}
+
+.expanded-post {
+  margin-bottom: 15px !important;
+  padding: 10px !important;
+  border-left: 3px solid #773311 !important;
+}
+
+.expanded-posts-status {
+  margin-top: 10px !important;
+  font-style: italic !important;
+}
+
+/* Backlink Styling */
+.backlink.expanded-bottom {
+  color: #773311 !important;
+  text-decoration: line-through !important;
+}
+
+/* Loading and Error Styling */
+.loading {
+  color: #555 !important;
+  font-style: italic !important;
+  padding: 5px !important;
+}
+
+.error {
+  color: #cc0000 !important;
+  font-weight: bold !important;
+  padding: 5px !important;
+}
+
+/* Image styling */
+.thread_image_box {
+  text-align: center !important;
+  padding: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+.post-image {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 500px !important;
+  display: block !important;
+  margin: 0 auto !important;
+  border: 1px solid #ddd !important;
+}
+
+/* Settings UI Elements */
+.spookyx-settings-button {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  background: #553311 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 18px !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  z-index: 9999 !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3) !important;
+}
+
+.spookyx-settings-panel {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 80% !important;
+  max-width: 800px !important;
+  max-height: 80vh !important;
+  overflow-y: auto !important;
+  background: white !important;
+  padding: 20px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+  z-index: 99999 !important;
+}
+
+/* Post highlight styles */
+.post_is_op {
+  border: 2px solid #AF3355 !important;
+} 

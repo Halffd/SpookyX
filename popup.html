@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SpookyX Options</title>
+  <style>
+    body {
+      width: 300px;
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+    
+    h1 {
+      color: #553311;
+      font-size: 18px;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    
+    .option-group {
+      margin-bottom: 10px;
+      padding: 8px;
+      background-color: #fff;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .option-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .option-description {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    
+    button {
+      background-color: #553311;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      background-color: #773311;
+    }
+    
+    .footer {
+      margin-top: 15px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>SpookyX Extension</h1>
+  
+  <div class="option-group">
+    <div class="option-title">About</div>
+    <div class="option-description">
+      SpookyX enhances FoolFuuka boards with additional features and improvements.
+    </div>
+  </div>
+  
+  <div class="option-group">
+    <div class="option-title">Features Status</div>
+    <div class="option-description" id="status-message">
+      Extension is active on supported archive sites.
+    </div>
+  </div>
+  
+  <div class="option-group">
+    <div class="option-title">Options</div>
+    <div class="option-description">
+      Settings can be accessed via the button below or on any supported archive page.
+    </div>
+    <button id="open-settings">Open Full Settings</button>
+  </div>
+  
+  <div class="footer">
+    SpookyX v32.50
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html> 

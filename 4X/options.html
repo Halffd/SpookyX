@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4X Options</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    h1 {
+      margin-top: 0;
+      color: #444;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    
+    .info-box {
+      margin: 20px 0;
+      padding: 15px;
+      background-color: #e8f4fd;
+      border-left: 4px solid #0078d7;
+      border-radius: 2px;
+    }
+    
+    .button-group {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    
+    button {
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+    
+    button:hover {
+      background-color: #0063ad;
+    }
+    
+    button.secondary {
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+    
+    button.secondary:hover {
+      background-color: #e0e0e0;
+    }
+    
+    .version {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+    
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #888;
+      text-align: center;
+      border-top: 1px solid #ddd;
+      padding-top: 15px;
+    }
+  </style>
+  <script src="js/options.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>4X Extension Options</h1>
+    <div class="version">Version <span id="version">0.0.0</span></div>
+    
+    <p>
+      4X is a browser extension that enhances your browsing experience on archive sites.
+      It provides features like post expansion, dark mode, and more.
+    </p>
+    
+    <div class="info-box">
+      <p><strong>Note:</strong> All settings are configured directly on the archive sites.</p>
+      <p>Click the 4X button in the toolbar or use the button below to open the settings panel on a supported archive site.</p>
+    </div>
+    
+    <div class="button-group">
+      <button id="open-options-btn">Open Settings Panel</button>
+      <button id="reset-data-btn" class="secondary">Reset All Data</button>
+    </div>
+    
+    <div class="footer">
+      4X Extension - Enhanced browsing for archive sites<br>
+      <a href="https://github.com/yourusername/4X" target="_blank">View on GitHub</a>
+    </div>
+  </div>
+</body>
+</html> 

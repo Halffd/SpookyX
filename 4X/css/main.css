@@ -1,0 +1,490 @@
+/* 4X Extension CSS */
+
+/* Post Styling */
+.expanded-posts-container {
+  border: 2px solid #773311 !important;
+  padding: 10px !important;
+  margin-top: 20px !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.expanded-posts-header {
+  font-weight: bold !important;
+  margin-bottom: 10px !important;
+  padding-bottom: 5px !important;
+  border-bottom: 1px solid #773311 !important;
+}
+
+.close-expanded-posts {
+  float: right !important;
+  border-radius: 5px !important;
+  color: white !important;
+  background: #553311 !important;
+  padding: 2px 8px !important;
+  cursor: pointer !important;
+}
+
+.expanded-post {
+  margin-bottom: 15px !important;
+  padding: 10px !important;
+  border-left: 3px solid #773311 !important;
+}
+
+.expanded-posts-status {
+  margin-top: 10px !important;
+  font-style: italic !important;
+}
+
+/* Backlink Styling */
+.backlink.expanded-bottom {
+  color: #773311 !important;
+  text-decoration: line-through !important;
+}
+
+.backlink.expanded-hover {
+  color: #AF3355 !important;
+  text-decoration: underline !important;
+}
+
+/* Loading and Error Styling */
+.loading {
+  color: #555 !important;
+  font-style: italic !important;
+  padding: 5px !important;
+}
+
+.error {
+  color: #cc0000 !important;
+  font-weight: bold !important;
+  padding: 5px !important;
+}
+
+/* Image styling */
+.thread_image_box {
+  text-align: center !important;
+  padding: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+.post-image {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 500px !important;
+  display: block !important;
+  margin: 0 auto !important;
+  border: 1px solid #ddd !important;
+}
+
+/* Settings UI Elements */
+.fourx-settings-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  background-color: #553311;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 9999;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.fourx-settings-button:hover {
+  transform: scale(1.1);
+  background-color: #703311;
+}
+
+/* Settings panel */
+.fourx-settings-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  max-width: 90%;
+  max-height: 80vh;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.25);
+  z-index: 10000;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.fourx-settings-panel h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 10px;
+  color: #553311;
+}
+
+.fourx-settings-panel .setting-group {
+  margin-bottom: 20px;
+}
+
+.fourx-settings-panel .setting-group h3 {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  color: #553311;
+  font-size: 16px;
+}
+
+.fourx-settings-panel .setting {
+  margin-bottom: 10px;
+}
+
+.fourx-settings-panel input[type="text"] {
+  width: 100%;
+  padding: 5px;
+  box-sizing: border-box;
+  margin-top: 5px;
+}
+
+/* Expanded post styles */
+.fourx-expanded-post {
+  background-color: #f8f8f8;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 8px 0;
+  padding: 10px;
+  position: relative;
+}
+
+.fourx-post-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fourx-post-num {
+  font-weight: bold;
+  color: #553311;
+}
+
+.fourx-post-name {
+  color: #117743;
+  font-weight: bold;
+}
+
+.fourx-post-date {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.fourx-close-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  cursor: pointer;
+  font-size: 20px;
+  color: #553311;
+}
+
+.fourx-post-body {
+  word-wrap: break-word;
+}
+
+.fourx-img-container {
+  float: left;
+  margin-right: 15px;
+  margin-bottom: 5px;
+}
+
+.fourx-post-img {
+  max-width: 150px;
+  max-height: 150px;
+  cursor: pointer;
+}
+
+.fourx-img-info {
+  font-size: 0.8em;
+  margin-top: 3px;
+  color: #666;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fourx-img-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fourx-full-img {
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.fourx-close-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+}
+
+/* Backlinks section */
+.fourx-backlinks {
+  margin-top: 10px;
+  padding-top: 5px;
+  border-top: 1px dotted #ddd;
+}
+
+.fourx-backlinks-header {
+  font-weight: bold;
+  color: #553311;
+  margin-bottom: 5px;
+}
+
+.fourx-backlink {
+  margin-right: 5px;
+  color: #553311;
+  text-decoration: none;
+}
+
+/* Loading and error indicators */
+.fourx-loading {
+  font-style: italic;
+  color: #888;
+  margin: 5px 0;
+}
+
+.fourx-error {
+  color: #e53935;
+  margin: 5px 0;
+}
+
+/* Hover post preview */
+.fourx-hover-post {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  z-index: 10000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  white-space: normal;
+}
+
+/* Dark mode */
+.fourx-dark-mode .fourx-expanded-post,
+.fourx-dark-mode .fourx-hover-post {
+  background-color: #333;
+  border-color: #444;
+  color: #eee;
+}
+
+.fourx-dark-mode .fourx-post-num {
+  color: #f0ad4e;
+}
+
+.fourx-dark-mode .fourx-post-date,
+.fourx-dark-mode .fourx-img-info {
+  color: #aaa;
+}
+
+.fourx-dark-mode .fourx-backlinks {
+  border-top-color: #444;
+}
+
+.fourx-dark-mode .fourx-backlinks-header,
+.fourx-dark-mode .fourx-backlink {
+  color: #f0ad4e;
+}
+
+/* Compact mode */
+.fourx-compact-mode .fourx-expanded-post {
+  padding: 5px;
+  margin: 4px 0;
+}
+
+.fourx-compact-mode .fourx-post-header {
+  margin-bottom: 4px;
+}
+
+.fourx-compact-mode .fourx-img-container {
+  margin-right: 8px;
+  margin-bottom: 2px;
+}
+
+.fourx-compact-mode .fourx-post-img {
+  max-width: 100px;
+  max-height: 100px;
+}
+
+/* Keyword highlighting */
+.fourx-keyword-highlight {
+  border-left: 4px solid #f0ad4e !important;
+}
+
+.fourx-keyword {
+  background-color: #fffbcc;
+  font-weight: bold;
+}
+
+.fourx-dark-mode .fourx-keyword {
+  background-color: #554411;
+  color: #f0ad4e;
+}
+
+/* Post highlight styles */
+.post_is_op {
+  border: 2px solid #AF3355 !important;
+}
+
+.post-preview {
+  position: absolute !important;
+  z-index: 1000 !important;
+  border: 1px solid #773311 !important;
+  border-radius: 5px !important;
+  padding: 10px !important;
+  background-color: #fff !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important;
+  max-width: 500px !important;
+  max-height: 400px !important;
+  overflow: auto !important;
+}
+
+/* Post with keywords highlight */
+.keyword-highlight {
+  border: 2px solid #FFAA33 !important;
+  background-color: rgba(255, 170, 51, 0.1) !important;
+}
+
+/* Backlinks container */
+.backlinks {
+  font-size: 0.8em !important;
+  margin-top: 5px !important;
+  padding: 2px 5px !important;
+  border-top: 1px dotted #ccc !important;
+}
+
+/* Your post highlight */
+.your-post {
+  border: 2px solid #55AA55 !important;
+}
+
+/* Dark mode overrides - will be applied when dark mode is enabled */
+.dark-mode body,
+.dark-mode .post,
+.dark-mode .thread,
+.dark-mode .post_wrapper {
+  background-color: #222 !important;
+  color: #ddd !important;
+}
+
+.dark-mode .post-preview,
+.dark-mode .expanded-posts-container {
+  background-color: #333 !important;
+  color: #ddd !important;
+  border-color: #555 !important;
+}
+
+.dark-mode a {
+  color: #8ab4f8 !important;
+}
+
+/* Compact mode overrides */
+.compact-mode .post {
+  margin: 5px 0 !important;
+  padding: 5px !important;
+}
+
+.compact-mode .post_data {
+  font-size: 0.9em !important;
+}
+
+.compact-mode .text {
+  font-size: 0.95em !important;
+}
+
+/* Controls for expanded images and videos */
+.expanded-media-controls {
+  display: flex !important;
+  justify-content: center !important;
+  margin: 5px 0 !important;
+}
+
+.expanded-media-controls button {
+  margin: 0 5px !important;
+  padding: 2px 8px !important;
+  background: #553311 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+}
+
+/* Notification for new posts */
+.new-post-indicator {
+  position: fixed !important;
+  bottom: 70px !important;
+  right: 20px !important;
+  background: #AF3355 !important;
+  color: white !important;
+  padding: 5px 10px !important;
+  border-radius: 5px !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3) !important;
+  z-index: 9998 !important;
+  font-weight: bold !important;
+}
+
+/* Post options dropdown menu */
+.post-options-menu {
+  position: absolute !important;
+  background: white !important;
+  border: 1px solid #ccc !important;
+  border-radius: 3px !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+  z-index: 1000 !important;
+  padding: 5px 0 !important;
+}
+
+.post-options-menu-item {
+  padding: 5px 15px !important;
+  cursor: pointer !important;
+}
+
+.post-options-menu-item:hover {
+  background-color: #f5f5f5 !important;
+}
+
+/* Hover overlay for images */
+.hover-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.hover-overlay img,
+.hover-overlay video {
+  max-width: 90% !important;
+  max-height: 90% !important;
+  object-fit: contain !important;
+} 
