@@ -61,335 +61,93 @@ function adjustColor(currentColor, adjustments) {
 const delay = (ms) => {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+// Helper function to create post elements from your data structure
+function createPostElement(data) {
+    const postElement = document.createElement('article');
+    postElement.classList.add('post', 'expanded-post');
 
-// Modify the expandAllQuotes function to handle 403 errors better
-function expandAllQuotes(postElement) {
-    console.log("Starting expandAllQuotes on", postElement);
+    // Add post header
+    const headerElement = document.createElement('header');
+    const postDataElement = document.createElement('div');
+    postDataElement.classList.add('post_data');
 
-    // Create a container at the bottom of the post for expanded posts
-    const $postContainer = $(postElement).closest('.post_wrapper');
-    const $expandedContainer = $('<div class="expanded-posts-container"></div>');
-    $expandedContainer.css({
-        'border': '2px solid #773311',
-        'padding': '10px',
-        'margin-top': '20px',
-        'background-color': 'rgba(0, 0, 0, 0.05)'
-    });
+    // Add post number
+    const postNumElement = document.createElement('span');
+    postNumElement.classList.add('post_number');
+    postNumElement.textContent = `No. ${data.num}`;
+    postDataElement.appendChild(postNumElement);
 
-    // Add a header to the container
-    const $header = $('<div class="expanded-posts-header"></div>');
-    $header.html('<h3>Expanded Posts</h3>');
-    $header.css({
-        'font-weight': 'bold',
-        'margin-bottom': '10px',
-        'padding-bottom': '5px',
-        'border-bottom': '1px solid #773311'
-    });
-
-    // Add a close button
-    const $closeButton = $('<button class="close-expanded-posts">Close</button>');
-    $closeButton.css({
-        'float': 'right',
-        'border-radius': '5px',
-        'color': 'white',
-        'background': '#553311',
-        'padding': '2px 8px'
-    });
-    $closeButton.click(function() {
-        $expandedContainer.remove();
-    });
-
-    $header.prepend($closeButton);
-    $expandedContainer.append($header);
-
-    // Add the container to the bottom of the post
-    $postContainer.append($expandedContainer);
-
-    // Find all backlinks in the post that haven't been expanded yet
-    const backlinks = $(postElement).find('.backlink:not(.expanded-bottom)').toArray();
-    console.log("Found backlinks:", backlinks.length);
-
-    if (backlinks.length === 0) {
-        console.log("No backlinks to expand");
-        $expandedContainer.append('<div class="no-backlinks">No backlinks found to expand</div>');
-        return; // No more backlinks to expand
+    postElement.id = 'r' + (postDataElement.num ?? '0');
+    // Add author if available
+    if (data.name || data.name_processed) {
+        const authorElement = document.createElement('span');
+        authorElement.classList.add('post_author');
+        authorElement.textContent = data.name_processed || data.name || 'Anonymous';
+        postDataElement.appendChild(authorElement);
     }
 
-    // Keep track of posts we've already processed
-    let processedPosts = new Set();
-
-    // Process each backlink with a delay between fetches
-    let index = 0;
-    let processedCount = 0;
-
-    // Add a status indicator that updates as posts are processed
-    const $status = $('<div class="expanded-posts-status"></div>');
-    $status.css({
-        'margin-top': '10px',
-        'font-style': 'italic'
-    });
-    $expandedContainer.append($status);
-
-    // Update the status periodically
-    const statusInterval = setInterval(() => {
-        $status.text(`Processed ${processedCount} of ${backlinks.length} posts`);
-
-        if (processedCount >= backlinks.length) {
-            clearInterval(statusInterval);
-            $status.text(`Completed: ${processedCount} posts expanded`);
-        }
-    }, 500);
-
-    // Define fetchAndProcessPost function inline to ensure it's available
-    async function fetchAndProcessPost(board, postId, $placeholder) {
-        console.log(`Fetching and processing post ${board}:${postId}`);
-
-        try {
-            // Add a loading indicator
-            $placeholder.html(`<div class="loading">Loading post ${postId}...</div>`);
-
-            // Check if the post is already in the cache
-            if (typeof backend_vars !== 'undefined' &&
-                typeof backend_vars.loaded_posts !== 'undefined' &&
-                typeof backend_vars.loaded_posts[board + ':' + postId] !== 'undefined') {
-
-                if (backend_vars.loaded_posts[board + ':' + postId] === false) {
-                    // Post doesn't exist
-                    $placeholder.html('<div class="error">Post not found in cache</div>');
-                    return;
-                }
-
-                // Use the cached post data
-                const data = backend_vars.loaded_posts[board + ':' + postId];
-
-                // If we have formatted HTML, use it directly
-                if (data.formatted) {
-                    $placeholder.html(data.formatted);
-                } else {
-                    // Otherwise, create a post element manually
-                    const postElement = document.createElement('article');
-                    postElement.classList.add('post');
-
-                    // Add post header with author and timestamp if available
-                    const headerElement = document.createElement('header');
-                    const postDataElement = document.createElement('div');
-                    postDataElement.classList.add('post_data');
-
-                    // Add author if available
-                    if (data.name || data.name_processed) {
-                        const authorElement = document.createElement('span');
-                        authorElement.classList.add('post_author');
-                        authorElement.textContent = data.name_processed || data.name || 'Anonymous';
-                        postDataElement.appendChild(authorElement);
-                    }
-
-                    // Add timestamp if available
-                    if (data.timestamp) {
-                        const timestampElement = document.createElement('span');
-                        timestampElement.classList.add('time_wrap');
-                        const time = document.createElement('time');
-                        time.setAttribute('datetime', new Date(data.timestamp * 1000).toISOString());
-                        time.textContent = new Date(data.timestamp * 1000).toLocaleString();
-                        timestampElement.appendChild(time);
-                        postDataElement.appendChild(timestampElement);
-                    }
-
-                    headerElement.appendChild(postDataElement);
-                    postElement.appendChild(headerElement);
-
-                    // Add post content
-                    const contentElement = document.createElement('div');
-                    contentElement.classList.add('text');
-
-                    // Use the first available content field
-                    const content = data.comment_processed || data.com || data.comment || data.content || 'No content available';
-                    contentElement.innerHTML = content;
-
-                    postElement.appendChild(contentElement);
-
-                    // Add the post to the placeholder
-                    $placeholder.html(postElement);
-
-                    // Add image if available
-                    if (data.media && data.media.media_link) {
-                        try {
-                            console.log("Adding image from:", data.media.media_link);
-
-                            // Create image container
-                            const imageBox = document.createElement('div');
-                            imageBox.classList.add('thread_image_box');
-
-                            // Create image element
-                            const imageElement = document.createElement('img');
-                            imageElement.src = data.media.media_link;
-                            imageElement.classList.add('post-image');
-                            imageElement.style.width = 'auto';
-                            imageElement.style.maxWidth = '100%';
-                            imageElement.style.height = 'auto';
-                            imageElement.style.maxHeight = '500px';
-                            imageElement.style.display = 'block';
-
-                            // Add error handling for the image
-                            imageElement.onerror = function() {
-                                console.error('Image failed to load:', data.media.media_link);
-
-                                // Try alternative URLs if the original fails
-                                const originalSrc = data.media.media_link;
-                                let newSrc = originalSrc;
-
-                                // Try different domain variations
-                                if (originalSrc.includes('arch-img.b4k.dev')) {
-                                    newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
-                                } else if (originalSrc.includes('is2.4chan.org')) {
-                                    newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
-                                } else if (originalSrc.includes('is.4chan.org')) {
-                                    newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
-                                }
-
-                                if (newSrc !== originalSrc) {
-                                    console.log('Trying alternative image source:', newSrc);
-                                    this.src = newSrc;
-                                }
-                            };
-
-                            // Add the image to the container
-                            imageBox.appendChild(imageElement);
-
-                            // Insert the image container before the text
-                            const textElement = $placeholder.find('.text')[0];
-                            if (textElement) {
-                                textElement.parentNode.insertBefore(imageBox, textElement);
-                            } else {
-                                $placeholder.prepend(imageBox);
-                            }
-
-                            console.log("Image element added to post");
-                        } catch (error) {
-                            console.error('Error creating image element:', error);
-                        }
-                    }
-                }
-
-                // Process images in the post
-                if (typeof inlineImages === 'function') {
-                    setTimeout(() => {
-                        inlineImages($placeholder);
-                    }, 100);
-                }
-
-                return;
-            }
-
-            // Fetch the post data
-            const repliesUrl = `${backend_vars.api_url}_/api/chan/post/`;
-            const requestData = { board, num: postId };
-
-            try {
-                const response = await jQuery.ajax({
-                    url: repliesUrl,
-                    type: 'GET',
-                    data: requestData,
-                    dataType: 'json',
-                    timeout: 15000, // 15 second timeout
-                    beforeSend: function(xhr) {
-                        // Add headers that might help prevent 403 errors
-                        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-
-                        // Set a proper referer if possible
-                        const currentUrl = window.location.href;
-                        if (currentUrl) {
-                            xhr.setRequestHeader('Referer', currentUrl);
-                        }
-                    }
-                });
-
-                if (response.error) {
-                    $placeholder.html(`<div class="error">Error fetching post: ${response.error}</div>`);
-                    return;
-                }
-
-                // Process the post data
-                if (response.formatted) {
-                    $placeholder.html(response.formatted);
-                } else {
-                    // Create a basic post structure
-                    const postElement = $('<article class="post"></article>');
-
-                    // Add post content
-                    const contentElement = $('<div class="text"></div>');
-
-                    // Use the first available content field
-                    const content = response.comment_processed || response.com || response.comment || response.content || 'No content available';
-                    contentElement.html(content);
-
-                    postElement.append(contentElement);
-
-                    // Add the post to the placeholder
-                    $placeholder.html(postElement);
-
-                    // Add image if available
-                    if (response.media && response.media.media_link) {
-                        const imageBox = $('<div class="thread_image_box"></div>');
-                        const imageElement = $('<img>')
-                            .attr('src', response.media.media_link)
-                            .css({
-                                'width': 'auto',
-                                'max-width': '100%',
-                                'height': 'auto',
-                                'max-height': '500px',
-                                'display': 'block'
-                            })
-                            .addClass('post-image');
-
-                        // Add error handling for the image
-                        imageElement.on('error', function() {
-                            console.error('Image failed to load:', response.media.media_link);
-
-                            // Try alternative URLs if the original fails
-                            const originalSrc = response.media.media_link;
-                            let newSrc = originalSrc;
-
-                            // Try different domain variations
-                            if (originalSrc.includes('arch-img.b4k.dev')) {
-                                newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
-                            } else if (originalSrc.includes('is2.4chan.org')) {
-                                newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
-                            } else if (originalSrc.includes('is.4chan.org')) {
-                                newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
-                            }
-
-                            if (newSrc !== originalSrc) {
-                                console.log('Trying alternative image source:', newSrc);
-                                $(this).attr('src', newSrc);
-                            }
-                        });
-
-                        imageBox.append(imageElement);
-                        $placeholder.prepend(imageBox);
-                    }
-                }
-
-                // Process images in the post
-                if (typeof inlineImages === 'function') {
-                    setTimeout(() => {
-                        inlineImages($placeholder);
-                    }, 100);
-                }
-
-                // Cache the post data for future use
-                if (typeof backend_vars !== 'undefined' && typeof backend_vars.loaded_posts !== 'undefined') {
-                    backend_vars.loaded_posts[board + ':' + postId] = response;
-                }
-            } catch (error) {
-                console.error(`Error fetching post ${board}:${postId}:`, error);
-                $placeholder.html(`<div class="error">Error: ${error.message || 'Unknown error'}</div>`);
-            }
-        } catch (error) {
-            console.error(`Error processing post ${board}:${postId}:`, error);
-            $placeholder.html(`<div class="error">Error: ${error.message || 'Unknown error'}</div>`);
-        }
+    // Add timestamp if available
+    if (data.timestamp) {
+        const timestampElement = document.createElement('span');
+        timestampElement.classList.add('time_wrap');
+        const time = document.createElement('time');
+        time.setAttribute('datetime', new Date(data.timestamp * 1000).toISOString());
+        time.textContent = new Date(data.timestamp * 1000).toLocaleString();
+        timestampElement.appendChild(time);
+        postDataElement.appendChild(timestampElement);
     }
 
+    headerElement.appendChild(postDataElement);
+    postElement.appendChild(headerElement);
+
+    // Add image if available
+    if (data.media && data.media.media_link) {
+        const imageBox = document.createElement('div');
+        imageBox.classList.add('thread_image_box');
+
+        const imageElement = document.createElement('img');
+        imageElement.src = data.media.media_link;
+        imageElement.classList.add('post-image');
+        imageElement.style.cssText = 'width: auto; max-width: 100%; height: auto; max-height: 500px; display: block;';
+
+        // Add error handling for the image
+        imageElement.onerror = function() {
+            console.error('Image failed to load:', data.media.media_link);
+
+            // Try alternative URLs
+            const originalSrc = data.media.media_link;
+            let newSrc = originalSrc;
+
+            if (originalSrc.includes('arch-img.b4k.dev')) {
+                newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
+            } else if (originalSrc.includes('is2.4chan.org')) {
+                newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
+            } else if (originalSrc.includes('is.4chan.org')) {
+                newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
+            }
+
+            if (newSrc !== originalSrc) {
+                console.log('Trying alternative image source:', newSrc);
+                this.src = newSrc;
+            }
+        };
+
+        imageBox.appendChild(imageElement);
+        postElement.appendChild(imageBox);
+    }
+
+    // Add post content
+    const contentElement = document.createElement('div');
+    contentElement.classList.add('text');
+
+    // Use the first available content field
+    const content = data.comment_processed || data.com || data.comment || data.content || '';
+    contentElement.innerHTML = content;
+
+    postElement.appendChild(contentElement);
+
+    return postElement;
+}
     async function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
@@ -502,7 +260,6 @@ function expandAllQuotes(postElement) {
             // Continue with the next one even if there was an error
             setTimeout(processNextBacklink, 500);
         }
-    }
 
     // Start processing backlinks with an initial delay
     setTimeout(processNextBacklink, 500);
@@ -511,9 +268,9 @@ function expandAllQuotes(postElement) {
 function generatePost(postData) {
     // Create the main post element
     const postElement = document.createElement('article');
-    const did = postData.doc_id ?? '0'
+    const did = postData.doc_id ?? '0';
     postElement.classList.add('doc_id_' + did, 'has_image');
-    postElement.id = 'r' + postData.num;
+    postElement.id = 'r' + (postData.num ?? did);
     postElement.dataset.board = postData.board.shortname;
     postElement.dataset.docId = postData.doc_id;
 
@@ -909,63 +666,29 @@ const fetchOp = async (id) => {
 };
 const fetchPostElem = async (id) => {
     return await generatePostElem(postsObj[id]) || '';
-};
-// Generic AJAX request function
+};// In your fetchData function, remove this line:
+// xhr.setRequestHeader('Referer', currentUrl);
+
+// Modified fetchData function
 const fetchData = async (url, data) => {
-    const maxRetries = 3;
-    let retryCount = 0;
-    let retryDelay = 2000; // Start with 2 seconds delay
-
-    while (retryCount < maxRetries) {
     try {
-        const result = await jQuery.ajax({
-            url,
+        const response = await jQuery.ajax({
+            url: url,
             type: 'GET',
-            data,
-                dataType: 'json',
-                timeout: 15000, // 15 second timeout
-                beforeSend: function(xhr) {
-                    // Add headers that might help prevent 403 errors
-                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-
-                    // Set a proper referer if possible
-                    const currentUrl = window.location.href;
-                    if (currentUrl) {
-                        xhr.setRequestHeader('Referer', currentUrl);
-                    }
-                }
-        });
-
-        if (result.error) {
-            throw new Error(result.error);
-        }
-
-        return result; // Assuming result is the desired response
-    } catch (error) {
-            // Check if it's a 403 error or other network error that might benefit from retrying
-            if (error.status === 403 || error.status === 429 || error.status === 0) {
-                retryCount++;
-
-                if (retryCount < maxRetries) {
-                    console.warn(`Received ${error.status} error. Retrying (${retryCount}/${maxRetries}) after ${retryDelay}ms...`);
-
-                    // Wait before retrying
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-
-                    // Exponential backoff - double the delay for next retry
-                    retryDelay *= 2;
-                } else {
-                    console.error('Max retries reached. Giving up.', error);
-                    throw error;
-                }
-            } else {
-        console.error('Error fetching data:', error);
-        throw error;
+            data: data,
+            dataType: 'json',
+            timeout: 15000,
+            beforeSend: function(xhr) {
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                // Remove the Referer line - browsers won't allow it
             }
-        }
+        });
+        return response;
+    } catch (error) {
+        console.error('Fetch error:', error);
+        throw error;
     }
 };
-
 // Get the main thread
 const getMainThread = () => {
     const threadElement = document.querySelector('#main > article.thread');
@@ -990,53 +713,6 @@ const fetchPost = async (board, postId) => {
     const repliesUrl = `${backend_vars.api_url}_/api/chan/post/`;
     const data = { board, num: postId };
     return fetchData(repliesUrl, data);
-};
-
-// Function to fetch and process a post for the expandAllQuotes function
-const fetchAndProcessPost = async (board, postId, $placeholder) => {
-    console.log(`Fetching and processing post ${board}:${postId}`);
-
-    try {
-        // Add a loading indicator
-        $placeholder.html(`<div class="loading">Loading post ${postId}...</div>`);
-
-        // Check if the post is already in the cache
-        if (typeof backend_vars !== 'undefined' &&
-            typeof backend_vars.loaded_posts !== 'undefined' &&
-            typeof backend_vars.loaded_posts[board + ':' + postId] !== 'undefined') {
-
-            if (backend_vars.loaded_posts[board + ':' + postId] === false) {
-                // Post doesn't exist
-                $placeholder.html('<div class="error">Post not found in cache</div>');
-                return;
-            }
-
-            // Use the cached post data
-            const data = backend_vars.loaded_posts[board + ':' + postId];
-            await processPostData(data, $placeholder);
-            return;
-        }
-
-        // Fetch the post data
-        const response = await fetchPost(board, postId);
-
-        if (!response || response.error) {
-            $placeholder.html(`<div class="error">Error fetching post: ${response?.error || 'Unknown error'}</div>`);
-            return;
-        }
-
-        // Process the post data
-        await processPostData(response, $placeholder);
-
-        // Cache the post data for future use
-        if (typeof backend_vars !== 'undefined' && typeof backend_vars.loaded_posts !== 'undefined') {
-            backend_vars.loaded_posts[board + ':' + postId] = response;
-        }
-
-    } catch (error) {
-        console.error(`Error fetching post ${board}:${postId}:`, error);
-        $placeholder.html(`<div class="error">Error: ${error.message}</div>`);
-    }
 };
 
 // Helper function to process post data and update the placeholder
@@ -1258,65 +934,556 @@ async function fetchRepliesWithRetry(aElem, retries = 3, wait = 2000) {
     // Return an empty array instead of throwing to prevent breaking the UI
     return [];
 }
-let processedPosts = 0; // Counter for processed posts
-// Function to process each post
+let processedPosts = 0;
+// Global variables to track expansion state
+var autoExpandEnabled = true;
+var autoExpandProcessed = new Set();
+
+// Fixed addExpandButtonToPost function
+function addExpandButtonToPost(post) {
+    const $post = $(post);
+    const $postControls = $post.find('.post_controls').first();
+
+    if ($postControls.length === 0 || $postControls.find('.expand-all-btn').length > 0) {
+        return; // Skip if no controls or button already exists
+    }
+
+    // Count backlinks to see if we need the button
+    const backlinkCount = $post.find('.backlink').length;
+
+    if (backlinkCount > 0) {
+        const $expandBtn = $('<a href="#" class="btnr parent expand-all-btn">Expand All (' + backlinkCount + ')</a>');
+
+        $expandBtn.click(function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            if ($btn.hasClass('expanding')) return; // Prevent double-click
+
+            $btn.addClass('expanding').text('Expanding...');
+            expandAllQuotes(post);
+
+            // Update button after expansion
+            setTimeout(() => {
+                $btn.removeClass('expanding').text('Expanded').addClass('disabled');
+            }, 1000);
+        });
+
+        // Add after the last control link
+        $postControls.append($expandBtn);
+    }
+}
+var updS = ()=>{}
+
+// Enhanced expandAllQuotes with recursive expansion
+const expandAllQuotes = (postElement, depth = 0, maxDepth = 300) => {
+if (!postElement || !postElement.id) {
+    console.warn("Skipping post with no ID", postElement);
+    return;
+}
+    console.log(`Starting expandAllQuotes on post ${postElement.id || 'unknown'} at depth ${depth}`);
+
+    // Prevent infinite recursion
+    if (depth >= maxDepth) {
+        console.log(`Max depth ${maxDepth} reached, stopping recursion`);
+        return;
+    }
+
+    const $postWrapper = $(postElement).find('.post_wrapper').first();
+
+    // Check if already expanded
+    if ($postWrapper.find('.expanded-posts-container').length > 0) {
+        console.log("Post already expanded, skipping");
+        return;
+    }
+
+    const $expandedContainer = $('<div class="expanded-posts-container"></div>');
+    $expandedContainer.css({
+        'border': '2px solid #773311',
+        'padding': '10px',
+        'margin-top': '20px',
+        'background-color': 'rgba(0, 0, 0, 0.05)',
+        'border-radius': '5px'
+    });
+
+    // Add header with depth indicator
+    const $header = $('<div class="expanded-posts-header"></div>');
+    $header.html(`<h3 style="margin: 0; display: inline;">Expanded Posts (Depth ${depth})</h3>`);
+    $header.css({
+        'font-weight': 'bold',
+        'margin-bottom': '10px',
+        'padding-bottom': '5px',
+        'border-bottom': '1px solid #773311'
+    });
+
+    const $closeButton = $('<button class="close-expanded-posts">×</button>');
+    $closeButton.css({
+        'float': 'right',
+        'border': 'none',
+        'border-radius': '50%',
+        'color': 'white',
+        'background': '#553311',
+        'padding': '2px 8px',
+        'cursor': 'pointer',
+        'font-size': '16px',
+        'line-height': '1'
+    });
+    $closeButton.click(function() {
+        $expandedContainer.remove();
+        // Re-enable the expand button
+        $(postElement).find('.expand-all-btn').removeClass('disabled').text('Expand All');
+    });
+
+    $header.append($closeButton);
+    $expandedContainer.append($header);
+    $postWrapper.append($expandedContainer);
+
+    // Find ALL backlinks, including both processed and unprocessed
+    const backlinks = $(postElement).find('.backlink').toArray();
+    console.log(`Found ${backlinks.length} total backlinks at depth ${depth}`);
+
+    if (backlinks.length === 0) {
+        console.log("No backlinks to expand");
+        $expandedContainer.append('<div class="no-backlinks" style="text-align: center; padding: 20px; color: #666;">No backlinks found to expand</div>');
+        return;
+    }
+
+    // Processing variables
+    let processedPosts = new Set();
+    let index = 0;
+    let processedCount = 0;
+    let expandedPosts = []; // Track expanded posts for recursive processing
+
+    // Add status indicator
+    const $status = $('<div class="expanded-posts-status"></div>');
+    $status.css({
+        'margin-top': '10px',
+        'font-style': 'italic',
+        'color': '#666'
+    });
+    $expandedContainer.append($status);
+
+    // Add progress bar
+    const $progressContainer = $('<div class="progress-container" style="margin-top: 5px; background: #eee; border-radius: 3px; height: 4px;"></div>');
+    const $progressBar = $('<div class="progress-bar" style="background: #4CAF50; height: 100%; width: 0%; transition: width 0.3s;"></div>');
+    $progressContainer.append($progressBar);
+    $expandedContainer.append($progressContainer);
+
+    // Update status function
+    const updateStatus = () => {
+        const progress = Math.round((processedCount / backlinks.length) * 100);
+        $status.text(`Processing: ${processedCount} / ${backlinks.length} posts (${progress}%) - Depth ${depth}`);
+        $progressBar.css('width', progress + '%');
+
+        if (processedCount >= backlinks.length) {
+            $status.text(`Completed: ${processedCount} posts expanded at depth ${depth}`);
+            $progressContainer.fadeOut(1000);
+
+            // Start recursive expansion after a delay
+            if (depth < maxDepth && expandedPosts.length > 0) {
+                setTimeout(() => {
+                    console.log(`Starting recursive expansion for ${expandedPosts.length} posts at depth ${depth + 1}`);
+                    recursivelyExpandPosts();
+                }, 2000);
+            }
+        }
+    };
+    updS = updateStatus
+
+    // Recursive expansion function
+    const recursivelyExpandPosts = () => {
+        expandedPosts.forEach((expandedPost, index) => {
+            setTimeout(() => {
+                const $expandedPost = $(expandedPost);
+                if ($expandedPost.find('.backlink').length > 0) {
+                    console.log(`Recursively expanding post at depth ${depth + 1}, index ${index}`);
+                    expandAllQuotes(expandedPost[0], depth + 1, maxDepth);
+                }
+            }, index * 1000); // Stagger recursive expansions
+        });
+    };
+
+    // Enhanced fetchAndProcessPost with recursive tracking
+    async function fetchAndProcessPost(board, postId, $placeholder) {
+        console.log(`Fetching and processing post ${board}:${postId} at depth ${depth}`);
+
+        try {
+            $placeholder.html(`<div class="loading" style="padding: 10px; text-align: center;">Loading post ${postId}... (Depth ${depth})</div>`);
+
+            // Check cache first
+            if (postsObj[postId]) {
+                console.log(`Found post ${postId} in cache`);
+                const data = postsObj[postId];
+                const postElement = createPostElement(data);
+                $placeholder.html(postElement);
+
+                // Add to expanded posts for recursive processing
+                const $createdPost = $placeholder.find('article.post');
+                if (!$createdPost.find('.post_wrapper').length) {
+                    console.warn("Generated post missing .post_wrapper", $createdPost);
+                    return;
+                }
+                if ($createdPost.length > 0) {
+                    expandedPosts.push($createdPost);
+
+                    // Process any backlinks in this post
+                    setTimeout(() => {
+                        processPost($createdPost[0]).catch(console.error);
+                    }, 500);
+                }
+
+                // Process images properly
+                setTimeout(() => {
+                    if (typeof inlineImages === 'function') {
+                        console.log(`Processing images for cached post ${postId}`);
+                        inlineImages($createdPost);
+                    }
+                }, 100);
+
+                processedCount++;
+                updateStatus();
+                return;
+            }
+
+            // Fetch the post
+            const postData = await fetchPost(board, postId);
+
+            if (!postData || postData.error) {
+                $placeholder.html(`<div class="error" style="padding: 10px; color: #c00;">Post not found: ${postData?.error || 'Unknown error'}</div>`);
+                processedCount++;
+                updateStatus();
+                return;
+            }
+
+            // Add to cache
+            postsObj[postId] = postData;
+
+            // Create and insert post element
+            const postElement = createPostElement(postData);
+            $placeholder.html(postElement);
+
+            // Add to expanded posts for recursive processing
+            const $createdPost = $placeholder.find('article.post');
+            if ($createdPost.length > 0) {
+                expandedPosts.push($createdPost);
+
+                // Process any backlinks in this post after a delay
+                setTimeout(() => {
+                    processPost($createdPost[0]).catch(console.error);
+                }, 500);
+            }
+
+            // Process images
+            setTimeout(() => {
+                if ($createdPost.length > 0 && typeof inlineImages === 'function') {
+                    const imageBoxes = $createdPost.find('.thread_image_box').length;
+                    console.log(`Processing images for post ${postId}, found ${imageBoxes} image boxes`);
+                    inlineImages($createdPost);
+                }
+            }, 100);
+
+            processedCount++;
+            updateStatus();
+
+        } catch (error) {
+            console.error(`Error processing post ${board}:${postId}:`, error);
+            $placeholder.html(`<div class="error" style="padding: 10px; color: #c00;">Error: ${error.message || 'Unknown error'}</div>`);
+            processedCount++;
+            updateStatus();
+        }
+    }
+
+    // Process backlinks sequentially
+    async function processNextBacklink() {
+        if (index >= backlinks.length) {
+            console.log(`All backlinks processed for depth ${depth}`);
+            return;
+        }
+
+        const link = backlinks[index];
+        console.log(`Processing backlink ${index} at depth ${depth}:`, link);
+        index++;
+
+        try {
+            const $link = $(link);
+            const board = $link.data('board');
+            const postId = $link.data('post');
+
+            if (!board || !postId) {
+                console.error("Missing data attributes on backlink", link);
+                processedCount++;
+                updateStatus();
+                setTimeout(processNextBacklink, 50);
+                return;
+            }
+
+            // Skip if already processed in this expansion
+            const postKey = `${board}:${postId}`;
+            if (processedPosts.has(postKey)) {
+                console.log(`Post ${postKey} already processed in this expansion`);
+                processedCount++;
+                updateStatus();
+                setTimeout(processNextBacklink, 50);
+                return;
+            }
+
+            processedPosts.add(postKey);
+
+            // Create placeholder
+            const $placeholder = $('<div class="expanded-post-placeholder"></div>');
+            $placeholder.css({
+                'border': '1px solid #ccc',
+                'margin': '10px 0',
+                'padding': '10px',
+                'background': 'rgba(255, 255, 255, 0.5)',
+                'border-radius': '3px'
+            });
+
+            $expandedContainer.append($placeholder);
+
+            // Fetch and process
+            await fetchAndProcessPost(board, postId, $placeholder);
+
+            // Delay between requests
+            setTimeout(processNextBacklink, 300 + Math.random() * 200);
+
+        } catch (error) {
+            console.error("Error processing backlink:", error);
+            processedCount++;
+            updateStatus();
+            setTimeout(processNextBacklink, 500);
+        }
+    }
+
+    // Start processing
+    updateStatus();
+    processNextBacklink();
+}
 const processPost = async (post) => {
+    if (!post) {
+        console.error("processPost called with undefined post");
+        return;
+    }
+
     let id = post.id;
     let rec = false;
-    if (id.charAt(0) === 'r') {
+    if (id && id.charAt(0) === 'r') {
         id = id.substring(1);
         rec = true;
     }
-    let $p = $(post); // Convert post (HTML element) to a jQuery object
+
+    if (!id) {
+        console.error("Post has no ID:", post);
+        return;
+    }
+
+    let $p = $(post);
 
     // Style the OP post
     if ($p.hasClass('post_is_op')) {
         $p.css({
-            'border': '2px solid #AF3355', // AF Red color
-            'font-weight': (parseFloat($p.css('font-weight')) * 1.1) + 'em' // Increase font weight by 10%
-        });
+    'border': '2px solid #AF3355',
+    'background-color': '#FFF0F3' // Optional, to emphasize OP more
+});
     }
 
-    // Find the first <a> element within the post controls
-    let aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
-    if (aElem.length === 0) return; // Skip if no anchor found
+    // Find the correct anchor element
+    let aElem = $p.find('.post_data a[data-function="highlight"]').first();
+    if (aElem.length === 0) {
+        aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
+    }
+    if (aElem.length === 0) {
+        console.log(`No anchor element found for post ${id}`);
+        return;
+    }
 
-    let href = aElem.get(0).href;
     try {
-        // Use the retry function to fetch replies
+        // Use your existing fetchRepliesWithRetry function
         let replies = await fetchRepliesWithRetry(aElem);
-        // Assuming replies is an array of post numbers
-        const repliesElems = replies.map(num => {
-            let board = $p.data('board') || '_';
-            let el = $(`<a href="https://desuarchive.org/${board}/post/${num}/" class="backlink" data-function="highlight" data-backlink="true" data-board="${board}" data-post="${num}">&gt;&gt;${num}</a>`);
-            return el[0]; // Return the DOM element
-        });
 
-        // Insert all the anchor elements into the first <a> element found in aElem
-        for (let r of repliesElems) {
-            aElem.get(0).parentNode.appendChild(r);
+        if (!replies || replies.length === 0) {
+            console.log(`No replies found for post ${id}`);
+            addExpandButtonToPost(post);
+            processedPosts++;
+            return;
         }
 
-        let postData = $(aElem).closest('.post_data'); // Corrected case sensitivity
-        if (postData.find('.backlink').length > 0) {
-            let backlinks = $('<div class="backlinks" style="font-size: 0.7em; padding: 2px;">Quoted By:</div>');
-            postData.after(backlinks);
+        const repliesElems = replies.map(num => {
+            let board = $p.data('board') || 'co';
+            let el = $(`<a href="https://desuarchive.org/${board}/post/${num}/" class="backlink" data-function="highlight" data-backlink="true" data-board="${board}" data-post="${num}">&gt;&gt;${num}</a>`);
+            return el[0];
+        });
 
-            postData.find('.backlink').each(function () {
-                backlinks.append($(this)); // Use jQuery's append method for each '.backlink'
-            });
+        // Find or create the backlinks container
+        let $backlinksContainer = $p.find('.backlinks');
+        if ($backlinksContainer.length === 0) {
+            $backlinksContainer = $('<div class="backlinks" style="font-size: 0.7rem; padding: 2px;">Quoted By:</div>');
+            $p.find('.post_wrapper').append($backlinksContainer);
+        }
+
+        // Add the backlinks to the container
+        for (let r of repliesElems) {
+            $backlinksContainer.append(r);
+        }
+
+        // Add individual expand button to post controls
+        addExpandButtonToPost(post);
+
+        // Auto-expand if enabled and this is first page load
+        if (autoExpandEnabled && !autoExpandProcessed.has(id) && replies.length > 0) {
+            autoExpandProcessed.add(id);
+
+            setTimeout(() => {
+                console.log(`Auto-expanding post ${id} with ${replies.length} replies`);
+                expandAllQuotesInline(post);
+            }, Math.random() * 2000 + 1000);
         }
 
         console.log("Replies: ", replies, repliesElems);
-        console.log(id, href, $p, aElem); // Log info about the post
-
-        // Increment the processed posts counter
         processedPosts++;
-    } catch (err) {
-        console.error(err)
-    }
-};
 
+    } catch (err) {
+        console.error(`Error processing post ${id}:`, err);
+        addExpandButtonToPost(post);
+        processedPosts++;
+    }
+    // Process backlinks sequentially
+    async function processNextBacklink() {
+        if (index >= backlinks.length) {
+            console.log("All backlinks processed for this post");
+            return;
+        }
+
+        const link = backlinks[index];
+        console.log("Processing backlink", index, link);
+        index++;
+
+        try {
+            if ($(link).hasClass('expanded-bottom')) {
+                setTimeout(processNextBacklink, 50);
+                return;
+            }
+
+            $(link).addClass('expanded-bottom');
+
+            const $link = $(link);
+            const board = $link.data('board');
+            const postId = $link.data('post');
+
+            if (!board || !postId) {
+                console.error("Missing data attributes on backlink", link);
+                processedCount++;
+                updateStatus();
+                setTimeout(processNextBacklink, 50);
+                return;
+            }
+
+            // Skip if already processed
+            const postKey = `${board}:${postId}`;
+            if (processedPosts.has(postKey)) {
+                processedCount++;
+                updateStatus();
+                setTimeout(processNextBacklink, 50);
+                return;
+            }
+
+            processedPosts.add(postKey);
+
+            // Create placeholder
+            const $placeholder = $('<div class="expanded-post-placeholder"></div>');
+            $placeholder.css({
+                'border': '1px solid #ccc',
+                'margin': '10px 0',
+                'padding': '10px',
+                'background': 'rgba(255, 255, 255, 0.5)',
+                'border-radius': '3px'
+            });
+
+            $expandedContainer.append($placeholder);
+
+            // Fetch and process
+            await fetchAndProcessPost(board, postId, $placeholder);
+
+            // Small delay between requests
+            setTimeout(processNextBacklink, 200 + Math.random() * 300);
+
+        } catch (error) {
+            console.error("Error processing backlink:", error);
+            processedCount++;
+            updateStatus();
+            setTimeout(processNextBacklink, 500);
+        }
+    }
+
+    // Start processing
+ //   updateStatus();
+    processNextBacklink();
+}
+// Function to enable/disable auto-expansion
+function toggleAutoExpand() {
+    autoExpandEnabled = !autoExpandEnabled;
+    console.log(`Auto-expansion ${autoExpandEnabled ? 'enabled' : 'disabled'}`);
+
+    // Add visual indicator
+    const $indicator = $('#auto-expand-indicator');
+    if ($indicator.length === 0) {
+        $('body').append(`<div id="auto-expand-indicator" style="position: fixed; top: 10px; right: 10px; background: ${autoExpandEnabled ? '#4CAF50' : '#f44336'}; color: white; padding: 5px 10px; border-radius: 3px; z-index: 9999; font-size: 12px;">Auto-expand: ${autoExpandEnabled ? 'ON' : 'OFF'}</div>`);
+    } else {
+        $indicator.css('background', autoExpandEnabled ? '#4CAF50' : '#f44336').text(`Auto-expand: ${autoExpandEnabled ? 'ON' : 'OFF'}`);
+    }
+
+    // Hide indicator after 3 seconds
+    setTimeout(() => {
+        $('#auto-expand-indicator').fadeOut();
+    }, 3000);
+}
+
+
+// Add keyboard shortcut to toggle auto-expansion
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Shift+E to toggle auto-expansion
+    if (e.ctrlKey && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        toggleAutoExpand();
+    }
+});
+
+// Add global expand all button to page
+function addGlobalControls() {
+    const $controls = $('<div id="global-expand-controls" style="position: fixed; top: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px;"></div>');
+
+    const $autoToggle = $('<button id="toggle-auto-expand" style="margin-right: 10px; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Auto-expand: ON</button>');
+    const $expandAll = $('<button id="expand-all-posts" style="padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Expand All Posts</button>');
+
+    $autoToggle.click(toggleAutoExpand);
+    $expandAll.click(() => {
+        $('article.post').each((i, post) => {
+            setTimeout(() => {
+                expandAllQuotes(post);
+            }, i * 1000); // Stagger by 1 second each
+        });
+    });
+
+    $controls.append($autoToggle, $expandAll);
+    $('body').append($controls);
+
+    // Hide controls after 5 seconds, show on hover
+    setTimeout(() => {
+        $controls.css('opacity', '0.0');
+    }, 5000);
+
+    $controls.hover(
+        () => $controls.css('opacity', '1'),
+        () => $controls.css('opacity', '0.0')
+    );
+}
+
+// Initialize when page loads
+$(document).ready(() => {
+    addGlobalControls();
+
+    // Set initial auto-expand state
+    toggleAutoExpand(); // This will show the indicator initially
+});
 if (GM_info === undefined) {
     var GM_info = { script: { version: '32.50' } };
 }
@@ -4704,129 +4871,131 @@ $(document).ready(function () {
         clickHandler(e)
     })
     function clickHandler(e, called = false) {
-        console.warn(e, called)
-        if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) { // Inline replies
-            if (!e.originalEvent?.ctrlKey && e.which == 1) {
-                e.preventDefault();
-                var etarget = e.target;
-                var $etarget = $(etarget);
-                var postID = etarget.dataset.post.replace(',', '_'); // Replace to deal with crossboard links
-                var rootPostID = $etarget.closest('article.base').attr('id');
-                var op = getOp()
-                let article = etarget.closest('article.post')
-                let auto = etarget.getAttribute('auto') ?? '0'
-                let clicked = etarget.getAttribute('clicked') ?? '0'
-                let closestPost = etarget.closest('article')
-                console.log(op, postID, rootPostID)
-                let above = false
+      if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
+        if (!e.originalEvent?.ctrlKey && e.which == 1) {
+            e.preventDefault();
+            var etarget = e.target;
+            var $etarget = $(etarget);
+            var postID = etarget.dataset.post.replace(',', '_');
+            var rootPostID = $etarget.closest('article.base').attr('id');
+            var op = getOp()
+            let article = etarget.closest('article.post')
+            let auto = etarget.getAttribute('auto') ?? '0'
+            let clicked = etarget.getAttribute('clicked') ?? '0'
+            let closestPost = etarget.closest('article')
 
-                let ret = false
-                // Get current color
-                const currentColor = $etarget.css("color");
-                let adjustments = { red: 0, green: 0, blue: 0 };
+            let ret = false
+            const currentColor = $etarget.css("color");
+            let adjustments = { red: 0, green: 0, blue: 0 };
 
-                // Determine adjustments based on conditions
-                if (linksClicked.includes(postID) || postID == article?.id) {
-                    adjustments.red = 127; // +50% red
-                    ret = true
-                } else if (!called && !$etarget.hasClass('inline')) {
-                    adjustments.red = 64;  // +25% red
-                    adjustments.blue = -64; // -25% blue
+            if (linksClicked.includes(postID) || postID == article?.id) {
+                adjustments.red = 127;
+                ret = true
+            } else if (!called && !$etarget.hasClass('inline')) {
+                adjustments.red = 64;
+                adjustments.blue = -64;
+            } else {
+                adjustments.green = 89;
+            }
+
+            let isTop = postID == article?.id
+            let isOp = postID == op[0]
+            let isFocused = focused.id == closestPost.id
+            if (called && isFocused) {
+                adjustments.red = 44
+            }
+            if (isTop || (isOp && called && isFocused)) {
+                adjustments.blue = -50
+                ret = true
+            }
+
+            $etarget.css("color", adjustColor(currentColor, adjustments));
+            if (ret) return
+
+            if (isOp) {
+                if (clicked == '0') {
+                    etarget.setAttribute('clicked', '1')
+                    let cloned = etarget.closest('.thread').cloneNode(true)
+                    try {
+                        cloned.querySelector('aside').remove()
+                        cloned.querySelector('#reply').remove()
+                        cloned.querySelector('.thread_tools_bottom').remove()
+                        cloned.querySelector('.js_hook_realtimethread').remove()
+                    } catch { }
+                    cloned.style.border = '2px solid #773311'
+                    etarget.parentNode.append(cloned)
+                    return
                 } else {
-                    adjustments.green = 89; // +35% green
-                }
-
-                let isTop = postID == article?.id
-                let isOp = postID == op[0]
-                let isFocused = focused.id == closestPost.id
-                if (called && isFocused) {
-                    adjustments.red = 44
-                }
-                if (isTop || (isOp && called && isFocused)) {
-                    adjustments.blue = -50
-                    ret = true
-                }
-                // Apply the new color
-                $etarget.css("color", adjustColor(currentColor, adjustments));
-                if (ret) return
-                if (isOp) {
-                    if (clicked == '0') {
-                        etarget.setAttribute('clicked', '1')
-                        let cloned = etarget.closest('.thread').cloneNode(true)
-                        try {
-                            cloned.querySelector('aside').remove()
-                            cloned.querySelector('#reply').remove()
-                            cloned.querySelector('.thread_tools_bottom').remove()
-                            cloned.querySelector('.js_hook_realtimethread').remove()
-                        } catch { }
-                        cloned.style.border = '2px solid #773311'
-                        etarget.parentNode.append(cloned)
-                        return
-                    } else {
-                        etarget.parentNode.querySelector('article').remove()
-                        etarget.setAttribute('clicked', '0')
-                        return
-                    }
-                }
-                if (etarget.parentNode.className == "post_backlink") {
-                    if ($etarget.hasClass("inlined")) {
-                        $etarget.removeClass("inlined");
-                        $('.sub' + rootPostID).each(function (index, currentPost) {
-                            $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
-                        });
-                        $('#i' + postID + '.sub' + rootPostID).remove();
-                    } else {
-                        $etarget.addClass("inlined");
-                        let add = etarget.parentNode.parentNode
-                        if (called) {
-                            add = add.closest('.post_wrapper').querySelector('.text')
-                            // Create an empty <div> and store it in a variable
-                            var $div = $('<div class="empty-div"></div>'); // You can add a class if needed
-                            $(add).after($div)
-                            add = $div.get(0)
-                        }
-                        $(add).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
-                        $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
-                        $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
-                            if (!$(currentPost).hasClass('sub' + rootPostID)) {
-                                $(currentPost).attr("class", "inline sub" + rootPostID);
-                            }
-                        });
-                        $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
-                        if (settings.UserSettings.inlineImages.value) {
-                            inlineImages($('#r' + postID));
-                        } // Inline images
-                        addHover($('#i' + postID));
-                    }
-                } else {
-                    if ($etarget.hasClass("inlined")) {
-                        $etarget.removeClass("inlined");
-                        $('.sub' + rootPostID).each(function (index, currentPost) {
-                            $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
-                        });
-                        $('#i' + postID + '.sub' + rootPostID).remove();
-                    } else {
-                        $etarget.addClass("inlined");
-                        //if(inverse){
-                        $(etarget.parentNode).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
-                        //} else {
-                        //  $(etarget.parentNode.parentNode).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
-                        //}
-                        $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
-                        $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
-                            if (!$(currentPost).hasClass('sub' + rootPostID)) {
-                                $(currentPost).attr("class", "inline sub" + rootPostID);
-                            }
-                        });
-                        $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
-                        if (settings.UserSettings.inlineImages.value) {
-                            inlineImages($('#r' + postID));
-                        } // Inline images
-                        addHover($('#i' + postID));
-                    }
+                    etarget.parentNode.querySelector('article').remove()
+                    etarget.setAttribute('clicked', '0')
+                    return
                 }
             }
-        } else if (settings.UserSettings.postQuote.value && e.target.className === "postQuote") { // Better post quoting
+
+            if (etarget.parentNode.className == "post_backlink") {
+                if ($etarget.hasClass("inlined")) {
+                    $etarget.removeClass("inlined");
+                    $('.sub' + rootPostID).each(function (index, currentPost) {
+                        $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
+                    });
+                    $('#i' + postID + '.sub' + rootPostID).remove();
+                } else {
+                    $etarget.addClass("inlined");
+                    let add = etarget.parentNode.parentNode
+                    if (called) {
+                        add = add.closest('.post_wrapper').querySelector('.text')
+                        var $div = $('<div class="empty-div"></div>');
+                        $(add).after($div)
+                        add = $div.get(0)
+                    }
+                    $(add).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
+                    $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
+                    $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
+                        if (!$(currentPost).hasClass('sub' + rootPostID)) {
+                            $(currentPost).attr("class", "inline sub" + rootPostID);
+                        }
+                    });
+                    $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
+                    if (settings.UserSettings.inlineImages.value) {
+                        inlineImages($('#r' + postID));
+                    }
+                    addHover($('#i' + postID));
+                }
+            } else {
+                if ($etarget.hasClass("inlined")) {
+                    $etarget.removeClass("inlined");
+                    $('.sub' + rootPostID).each(function (index, currentPost) {
+                        $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
+                    });
+                    $('#i' + postID + '.sub' + rootPostID).remove();
+                } else {
+                    $etarget.addClass("inlined");
+                    $(etarget.parentNode).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
+                    $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
+                    $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
+                        if (!$(currentPost).hasClass('sub' + rootPostID)) {
+                            $(currentPost).attr("class", "inline sub" + rootPostID);
+                        }
+                    });
+                    $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
+                    if (settings.UserSettings.inlineImages.value) {
+                        inlineImages($('#r' + postID));
+                    }
+                    addHover($('#i' + postID));
+                }
+            }
+
+            // NEW: Process inlined posts for more backlinks
+            if (search && !$etarget.hasClass("inlined")) {
+                setTimeout(() => {
+                    const inlinedPost = document.getElementById('r' + postID);
+                    if (inlinedPost) {
+                        processPost(inlinedPost);
+                    }
+                }, 200);
+            }
+        }
+    }  else if (settings.UserSettings.postQuote.value && e.target.className === "postQuote") { // Better post quoting
             if (!e.originalEvent.ctrlKey && e.which == 1) {
                 e.preventDefault();
                 var postnum = e.target.innerHTML;
@@ -5329,39 +5498,6 @@ $(document).ready(function () {
                 });
                 $this.after($button);
 
-                // Add the expand all button (only on search pages)
-                if (search) {
-                    let $expandButton = $('<button class="expand-all-button">Expand All</button>');
-                    $expandButton.css({
-                        'height': $this.height(),
-                        'border-radius': '5px',
-                        'color': 'white',
-                        'background': '#553311',
-                        'margin-left': '5px',
-                        'font-size': '0.8em',
-                        'padding': '0 5px'
-                    });
-                    $button.after($expandButton);
-
-                    // Add click handler for the expand all button
-                    $expandButton.click(function() {
-                        // Get the post element
-                        const postElement = $this.closest('article.post');
-
-                        // Change button appearance to indicate it's working
-                        $expandButton.text('Expanding...');
-                        $expandButton.css('background', '#775533');
-
-                        // Start the recursive expansion
-                        expandAllQuotes(postElement);
-
-                        // Change button appearance after expansion is complete
-                        setTimeout(() => {
-                            $expandButton.text('Expanded');
-                            $expandButton.css('background', '#557755');
-                        }, 5000); // Longer timeout to account for the recursive expansion
-                    });
-                }
 
                 $button.click(async function () {
                     console.log("OP button clicked");
@@ -5502,7 +5638,7 @@ $(document).ready(function () {
                     const url = document.URL;
                     var wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
                     if(url.split('/')[2].includes('b4k')){
-                      wait = 5000
+                      wait = 15000
                     }
 
                     // Sequentially process each post with a delay
