@@ -34,8 +34,10 @@
 // @include       https://arch.b4k.co/*
 // @include       https://old.sage.moe/*
 // @include       https://arch.b4k.dev/*
-// @require       https://cdn.rawgit.com/madapaja/jquery.selection/master/src/jquery.selection.js
-// @require       https://raw.githubusercontent.com/jquery/jquery-mousewheel/master/jquery.mousewheel.min.js
+// @include       http://archived.moe/*
+// @include       https://archived.moe/*
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery.selection/1.0.1/jquery.selection.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-mousewheel/3.1.13/jquery.mousewheel.min.js
 // @require       https://raw.githubusercontent.com/carloscabo/colz/master/public/js/colz.class.min.js
 // @grant         none
 // @icon          https://i.imgur.com/LaYyYRl.png
@@ -59,94 +61,229 @@ function adjustColor(currentColor, adjustments) {
 const delay = (ms) => {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-// Helper function to create post elements from your data structure
 function createPostElement(data) {
     const postElement = document.createElement('article');
     postElement.classList.add('post', 'expanded-post');
+    postElement.id = 'r' + (data.num || data.no || '0');
 
-    // Add post header
-    const headerElement = document.createElement('header');
-    const postDataElement = document.createElement('div');
-    postDataElement.classList.add('post_data');
+    let boardName = 'unknown';
+    if (data.board) {
+        if (typeof data.board === 'object' && data.board !== null && data.board.shortname) {
+            boardName = data.board.shortname;
+        } else if (typeof data.board === 'string') {
+            boardName = data.board;
+        }
+    }
+    postElement.setAttribute('data-board', boardName);
 
-    // Add post number
-    const postNumElement = document.createElement('span');
-    postNumElement.classList.add('post_number');
-    postNumElement.textContent = `No. ${data.num}`;
-    postDataElement.appendChild(postNumElement);
-
-    postElement.id = 'r' + (postDataElement.num ?? '0');
-    // Add author if available
-    if (data.name || data.name_processed) {
-        const authorElement = document.createElement('span');
-        authorElement.classList.add('post_author');
-        authorElement.textContent = data.name_processed || data.name || 'Anonymous';
-        postDataElement.appendChild(authorElement);
+    if (data.media) {
+        postElement.classList.add('has_image');
     }
 
-    // Add timestamp if available
-    if (data.timestamp) {
-        const timestampElement = document.createElement('span');
-        timestampElement.classList.add('time_wrap');
-        const time = document.createElement('time');
-        time.setAttribute('datetime', new Date(data.timestamp * 1000).toISOString());
-        time.textContent = new Date(data.timestamp * 1000).toLocaleString();
-        timestampElement.appendChild(time);
-        postDataElement.appendChild(timestampElement);
-    }
+    // Create post wrapper
+    const postWrapper = document.createElement('div');
+    postWrapper.classList.add('post_wrapper');
 
-    headerElement.appendChild(postDataElement);
-    postElement.appendChild(headerElement);
-
-    // Add image if available
+    // Add file info if image exists
     if (data.media && data.media.media_link) {
+        const postFile = document.createElement('div');
+        postFile.classList.add('post_file');
+
+        const filename = data.media.media_filename || data.filename || 'image';
+        const filesize = data.fsize ? Math.round(data.fsize / 1024) + 'KiB' : 'Unknown size';
+        const dimensions = (data.media.media_w && data.media.media_h) ?
+            `${data.media.media_w}x${data.media.media_h}` : '';
+
+        postFile.innerHTML = `
+            <span class="post_file_controls">
+                <a href="#" class="btnr parent">View Same</a>
+                <a href="#" class="btnr parent">Google</a>
+                <a href="#" class="btnr parent">ImgOps</a>
+                <a href="#" class="btnr parent">iqdb</a>
+                <a href="#" class="btnr parent">SauceNAO</a>
+                <a href="${data.media.media_link}" download="${filename}" class="btnr parent">
+                    <i class="icon-download-alt"></i>
+                </a>
+            </span>
+            <a href="${data.media.media_link}" class="post_file_filename" title="${filename}">${filename}</a>,
+            <span class="post_file_metadata">${filesize}${dimensions ? ', ' + dimensions : ''}</span>
+        `;
+
+        postWrapper.appendChild(postFile);
+
+        // Add image box
         const imageBox = document.createElement('div');
         imageBox.classList.add('thread_image_box');
 
+        const imageLink = document.createElement('a');
+        imageLink.href = data.media.media_link;
+        imageLink.target = '_blank';
+        imageLink.rel = 'noreferrer';
+        imageLink.classList.add('thread_image_link');
+
         const imageElement = document.createElement('img');
         imageElement.src = data.media.media_link;
-        imageElement.classList.add('post-image');
-        imageElement.style.cssText = 'width: auto; max-width: 100%; height: auto; max-height: 500px; display: block;';
+        imageElement.classList.add('post_image');
+        imageElement.loading = 'lazy';
 
-        // Add error handling for the image
+        // Add dimensions if available
+        if (data.media.media_w && data.media.media_h) {
+            const maxWidth = Math.min(data.media.media_w, 250);
+            const maxHeight = Math.min(data.media.media_h, 250);
+            imageElement.style.maxWidth = maxWidth + 'px';
+            imageElement.style.maxHeight = maxHeight + 'px';
+        }
+
         imageElement.onerror = function() {
-            console.error('Image failed to load:', data.media.media_link);
-
-            // Try alternative URLs
-            const originalSrc = data.media.media_link;
-            let newSrc = originalSrc;
-
-            if (originalSrc.includes('arch-img.b4k.dev')) {
-                newSrc = originalSrc.replace('arch-img.b4k.dev', 'b4k.co/media');
-            } else if (originalSrc.includes('is2.4chan.org')) {
-                newSrc = originalSrc.replace('is2.4chan.org', 'i.4cdn.org');
-            } else if (originalSrc.includes('is.4chan.org')) {
-                newSrc = originalSrc.replace('is.4chan.org', 'i.4cdn.org');
-            }
-
-            if (newSrc !== originalSrc) {
-                console.log('Trying alternative image source:', newSrc);
-                this.src = newSrc;
-            }
+            console.warn('Image failed to load:', data.media.media_link);
+            this.style.display = 'none';
         };
 
-        imageBox.appendChild(imageElement);
-        postElement.appendChild(imageBox);
+        imageLink.appendChild(imageElement);
+        imageBox.appendChild(imageLink);
+        postWrapper.appendChild(imageBox);
     }
 
-    // Add post content
-    const contentElement = document.createElement('div');
-    contentElement.classList.add('text');
+    // Create header
+    const header = document.createElement('header');
+    const postData = document.createElement('div');
+    postData.classList.add('post_data');
 
-    // Use the first available content field
+    // Mobile controls dropdown (simplified)
+    const mobileControls = document.createElement('div');
+    mobileControls.classList.add('post_mobile_controls_collapse', 'dropdown');
+    mobileControls.innerHTML = `
+        <button data-toggle="dropdown" class="btnr parent">
+            <i class="icon-th-list"></i>
+        </button>
+        <ul class="dropdown-menu" role="menu">
+            <li class="nav-header">Post</li>
+            <li><a href="#" data-function="report">Report</a></li>
+        </ul>
+    `;
+    postData.appendChild(mobileControls);
+
+    // Board indicator
+    if (data.board) {
+        const boardSpan = document.createElement('span');
+        boardSpan.classList.add('post_show_board');
+        boardSpan.textContent = `/${boardName}/`;
+        postData.appendChild(boardSpan);
+    }
+
+    // Title (usually empty)
+    const title = document.createElement('h2');
+    title.classList.add('post_title');
+    title.textContent = data.title || '';
+    postData.appendChild(title);
+
+    // Author info
+    const posterData = document.createElement('span');
+    posterData.classList.add('post_poster_data');
+
+    const author = document.createElement('span');
+    author.classList.add('post_author');
+    author.textContent = data.name || data.name_processed || 'Anonymous';
+    posterData.appendChild(author);
+
+    const tripcode = document.createElement('span');
+    tripcode.classList.add('post_tripcode');
+    tripcode.textContent = data.trip || '';
+    posterData.appendChild(tripcode);
+
+    postData.appendChild(posterData);
+
+    // Timestamp
+    if (data.timestamp || data.time) {
+        const timeWrap = document.createElement('span');
+        timeWrap.classList.add('time_wrap');
+
+        const timeElement = document.createElement('time');
+        const timestamp = parseInt(data.timestamp || data.time);
+        const date = new Date(timestamp * 1000);
+
+        if (!isNaN(date.getTime())) {
+            timeElement.setAttribute('datetime', date.toISOString());
+            timeElement.setAttribute('title', `4chan Time: ${date.toLocaleDateString()}`);
+
+            // Format: "Tue 12 Aug 2025 15:52:47"
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+            const dayName = days[date.getDay()];
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+
+            timeElement.textContent = `${dayName} ${day} ${month} ${year} ${hours}:${minutes}:${seconds}`;
+        }
+
+        timeWrap.appendChild(timeElement);
+        postData.appendChild(timeWrap);
+    }
+
+    // Post number links
+    const postNum = data.num || data.no;
+    const postLink1 = document.createElement('a');
+    postLink1.href = `#r${postNum}`;
+    postLink1.setAttribute('data-post', postNum);
+    postLink1.setAttribute('data-function', 'highlight');
+    postLink1.setAttribute('title', 'Link to this post');
+    postLink1.textContent = 'No.';
+    postData.appendChild(postLink1);
+
+    const postLink2 = document.createElement('a');
+    postLink2.href = `#q${postNum}`;
+    postLink2.setAttribute('data-post', postNum);
+    postLink2.setAttribute('data-function', 'quote');
+    postLink2.setAttribute('title', 'Reply to this post');
+    postLink2.textContent = postNum;
+    postData.appendChild(postLink2);
+
+    // Post type (flags, etc.)
+    const postType = document.createElement('span');
+    postType.classList.add('post_type');
+    postData.appendChild(postType);
+
+    // Mobile view
+    const mobileView = document.createElement('span');
+    mobileView.classList.add('mobile_view');
+    postData.appendChild(mobileView);
+
+    // Post controls
+    const postControls = document.createElement('span');
+    postControls.classList.add('post_controls');
+    postControls.innerHTML = `
+        <a href="#r${postNum}" class="btnr parent">View</a>
+        <a href="#" class="btnr parent" data-function="report">Report</a>
+    `;
+    postData.appendChild(postControls);
+
+    header.appendChild(postData);
+    postWrapper.appendChild(header);
+
+    // Backlink list placeholder
+    const backlinkList = document.createElement('div');
+    backlinkList.classList.add('backlink_list');
+    backlinkList.innerHTML = 'Quoted By: <span class="post_backlink" data-post="' + postNum + '"></span>';
+    postWrapper.appendChild(backlinkList);
+
+    // Post content
+    const textDiv = document.createElement('div');
+    textDiv.classList.add('text');
     const content = data.comment_processed || data.com || data.comment || data.content || '';
-    contentElement.innerHTML = content;
+    textDiv.innerHTML = content;
+    postWrapper.appendChild(textDiv);
 
-    postElement.appendChild(contentElement);
+    postElement.appendChild(postWrapper);
 
     return postElement;
 }
-    async function processNextBacklink() {
+async function processNextBacklink() {
         if (index >= backlinks.length) {
             console.log("All backlinks processed");
             return; // All done
@@ -884,9 +1021,6 @@ const fetchReplies = async (link) => {
     const [threadId, postNumber] = extractThreadInfo(link);
     const post = link.closest('article.post');
     let board = $(post).data('board') || null;
-    if (!board) {
-        board = $(post).context.dataset.board;
-    }
     if (!board || !threadId) return null;
 
     const thread = await fetchThread(board, threadId);
@@ -937,82 +1071,174 @@ let processedPosts = 0;
 var autoExpandEnabled = true;
 var autoExpandProcessed = new Set();
 
-// Fixed addExpandButtonToPost function
+// Replace the original expand function
 function addExpandButtonToPost(post) {
     const $post = $(post);
     const $postControls = $post.find('.post_controls').first();
 
     if ($postControls.length === 0 || $postControls.find('.expand-all-btn').length > 0) {
-        return; // Skip if no controls or button already exists
+        return;
     }
 
-    // Count backlinks to see if we need the button
     const backlinkCount = $post.find('.backlink').length;
 
     if (backlinkCount > 0) {
-        const $expandBtn = $('<a href="#" class="btnr parent expand-all-btn">Expand All (' + backlinkCount + ')</a>');
+        const $expandBtn = $('<a href="#" class="btnr parent expand-all-btn">Expand Chain (' + backlinkCount + ')</a>');
 
         $expandBtn.click(function(e) {
             e.preventDefault();
             const $btn = $(this);
-            if ($btn.hasClass('expanding')) return; // Prevent double-click
+            if ($btn.hasClass('expanding')) return;
 
-            $btn.addClass('expanding').text('Expanding...');
-            expandAllQuotes(post);
+            $btn.addClass('expanding').text('Building Graph...');
+            expandAllQuotes(post, true); // Include OP
 
-            // Update button after expansion
             setTimeout(() => {
                 $btn.removeClass('expanding').text('Expanded').addClass('disabled');
             }, 1000);
         });
 
-        // Add after the last control link
         $postControls.append($expandBtn);
     }
 }
 var updS = ()=>{}
 
-// Enhanced expandAllQuotes with recursive expansion
-const expandAllQuotes = (postElement, depth = 0, maxDepth = 300) => {
-if (!postElement || !postElement.id) {
-    console.warn("Skipping post with no ID", postElement);
-    return;
-}
-    console.log(`Starting expandAllQuotes on post ${postElement.id || 'unknown'} at depth ${depth}`);
-
-    // Prevent infinite recursion
-    if (depth >= maxDepth) {
-        console.log(`Max depth ${maxDepth} reached, stopping recursion`);
-        return;
+// Graph structure to track post relationships
+class PostGraph {
+    constructor() {
+        this.nodes = new Map(); // postId -> {data, replies: Set, parent: postId}
+        this.roots = new Set(); // Root posts (OPs or posts with no parent)
     }
 
-    const $postWrapper = $(postElement).find('.post_wrapper').first();
+    addPost(postId, data, parentId = null) {
+        let node;
+        if (!this.nodes.has(postId)) {
+            node = {
+                data: data,
+                replies: new Set(),
+                parent: parentId,
+                id: postId
+            };
+            this.nodes.set(postId, node);
+        } else {
+            node = this.nodes.get(postId);
+            // If we found a parent for an existing node that didn't have one
+            if (parentId && !node.parent) {
+                node.parent = parentId;
+            }
+        }
 
+        console.log(`Added post ${postId}  parent ${node.parent}`);
+
+        if (node.parent) {
+            if (this.nodes.has(node.parent)) {
+                this.nodes.get(node.parent).replies.add(postId);
+            }
+            // A node with a parent can't be a root
+            if (this.roots.has(postId)) {
+                this.roots.delete(postId);
+            }
+        } else {
+            // No parent, so it's a root (for now)
+            this.roots.add(postId);
+        }
+    }
+
+    // DFS to find root of reply chain
+    findRoot(postId) {
+        const visited = new Set();
+        
+        const dfs = (currentId) => {
+            if (visited.has(currentId)) return currentId; // Cycle detection
+            visited.add(currentId);
+            
+            const node = this.nodes.get(currentId);
+            if (!node || !node.parent || this.roots.has(currentId)) {
+                return currentId;
+            }
+            return dfs(node.parent);
+        };
+        
+        return dfs(postId);
+    }
+    
+    // BFS to get all posts in reply chain ordered by level
+    getReplyChainBFS(rootId, includeOP = true) {
+        const result = [];
+        const queue = [{id: rootId, level: 0}];
+        const visited = new Set();
+        
+        while (queue.length > 0) {
+            const {id, level} = queue.shift();
+            
+            if (visited.has(id)) continue;
+            visited.add(id);
+            
+            const node = this.nodes.get(id);
+            if (!node) continue;
+            
+            // Skip OP if not wanted
+            if (level === 0 && !includeOP) {
+                console.log(`OP skipped: ${id}`)
+                // Add children to queue
+                for (const replyId of node.replies) {
+                    queue.push({id: replyId, level: level + 1});
+                }
+                continue;
+            }
+            
+            result.push({
+                id: id,
+                level: level,
+                data: node.data,
+                replies: Array.from(node.replies)
+            });
+            
+            // Add children to queue
+            for (const replyId of node.replies) {
+                queue.push({id: replyId, level: level + 1});
+            }
+        }
+        
+        return result;
+    }
+}
+
+// Global graph instance
+const postGraph = new PostGraph();
+
+// Enhanced expandAllQuotes with graph traversal
+const expandAllQuotes = async (postElement, includeOP = true) => {
+    if (!postElement || !postElement.id) {
+        console.warn("Invalid post element");
+        return;
+    }
+    
+    const currentPostId = postElement.id.replace(/^r/, '');
+    console.log(`Starting graph expansion from post ${currentPostId}`);
+    
+    const $postWrapper = $(postElement).find('.post_wrapper').first();
+    
     // Check if already expanded
     if ($postWrapper.find('.expanded-posts-container').length > 0) {
-        console.log("Post already expanded, skipping");
+        console.log("Post already expanded");
         return;
     }
-
+    
+    // Create container
     const $expandedContainer = $('<div class="expanded-posts-container"></div>');
     $expandedContainer.css({
         'border': '2px solid #773311',
-        'padding': '10px',
+        'padding': '15px',
         'margin-top': '20px',
         'background-color': 'rgba(0, 0, 0, 0.05)',
         'border-radius': '5px'
     });
-
-    // Add header with depth indicator
+    
+    // Add header
     const $header = $('<div class="expanded-posts-header"></div>');
-    $header.html(`<h3 style="margin: 0; display: inline;">Expanded Posts (Depth ${depth})</h3>`);
-    $header.css({
-        'font-weight': 'bold',
-        'margin-bottom': '10px',
-        'padding-bottom': '5px',
-        'border-bottom': '1px solid #773311'
-    });
-
+    $header.html(`<h3 style="margin: 0; display: inline;">Reply Chain Expansion</h3>`);
+    
     const $closeButton = $('<button class="close-expanded-posts">×</button>');
     $closeButton.css({
         'float': 'right',
@@ -1022,239 +1248,160 @@ if (!postElement || !postElement.id) {
         'background': '#553311',
         'padding': '2px 8px',
         'cursor': 'pointer',
-        'font-size': '16px',
-        'line-height': '1'
+        'font-size': '16px'
     });
-    $closeButton.click(function() {
+    $closeButton.click(() => {
         $expandedContainer.remove();
-        // Re-enable the expand button
         $(postElement).find('.expand-all-btn').removeClass('disabled').text('Expand All');
     });
-
+    
     $header.append($closeButton);
     $expandedContainer.append($header);
     $postWrapper.append($expandedContainer);
-
-    // Find ALL backlinks, including both processed and unprocessed
-    const backlinks = $(postElement).find('.backlink').toArray();
-    console.log(`Found ${backlinks.length} total backlinks at depth ${depth}`);
-
-    if (backlinks.length === 0) {
-        console.log("No backlinks to expand");
-        $expandedContainer.append('<div class="no-backlinks" style="text-align: center; padding: 20px; color: #666;">No backlinks found to expand</div>');
-        return;
+    
+    try {
+        // Step 1: Build graph from current post and its backlinks
+        await buildPostGraph(postElement);
+        
+        // Step 2: DFS to find root
+        const rootId = postGraph.findRoot(currentPostId);
+        console.log(`Found root: ${rootId} for post ${currentPostId}`);
+        
+        // Step 3: BFS to get ordered reply chain
+        const replyChain = postGraph.getReplyChainBFS(rootId, includeOP);
+        console.log(`Reply chain has ${replyChain.length} posts`);
+        
+        // Step 4: Display posts in BFS order
+        await displayReplyChain(replyChain, $expandedContainer);
+        
+    } catch (error) {
+        console.error("Error in graph expansion:", error);
+        $expandedContainer.append(`<div class="error">Error: ${error.message}</div>`);
     }
+};
 
-    // Processing variables
-    let processedPosts = new Set();
-    let index = 0;
-    let processedCount = 0;
-    let expandedPosts = []; // Track expanded posts for recursive processing
-
-    // Add status indicator
-    const $status = $('<div class="expanded-posts-status"></div>');
-    $status.css({
-        'margin-top': '10px',
-        'font-style': 'italic',
-        'color': '#666'
-    });
-    $expandedContainer.append($status);
-
-    // Add progress bar
-    const $progressContainer = $('<div class="progress-container" style="margin-top: 5px; background: #eee; border-radius: 3px; height: 4px;"></div>');
-    const $progressBar = $('<div class="progress-bar" style="background: #4CAF50; height: 100%; width: 0%; transition: width 0.3s;"></div>');
-    $progressContainer.append($progressBar);
-    $expandedContainer.append($progressContainer);
-
-    // Update status function
-    const updateStatus = () => {
-        const progress = Math.round((processedCount / backlinks.length) * 100);
-        $status.text(`Processing: ${processedCount} / ${backlinks.length} posts (${progress}%) - Depth ${depth}`);
-        $progressBar.css('width', progress + '%');
-
-        if (processedCount >= backlinks.length) {
-            $status.text(`Completed: ${processedCount} posts expanded at depth ${depth}`);
-            $progressContainer.fadeOut(1000);
-
-            // Start recursive expansion after a delay
-            if (depth < maxDepth && expandedPosts.length > 0) {
-                setTimeout(() => {
-                    console.log(`Starting recursive expansion for ${expandedPosts.length} posts at depth ${depth + 1}`);
-                    recursivelyExpandPosts();
-                }, 2000);
-            }
+// Build graph from post and its network
+async function buildPostGraph(startPost) {
+    const visited = new Set();
+    const toProcess = [startPost];
+    
+    while (toProcess.length > 0) {
+        const post = toProcess.shift();
+        let postId = post.id;
+        // Better ID extraction and validation
+        if (!postId || postId === '0') {
+            console.warn('Invalid post ID:', postId, post);
+            continue;
         }
-    };
-    updS = updateStatus
-
-    // Recursive expansion function
-    const recursivelyExpandPosts = () => {
-        expandedPosts.forEach((expandedPost, index) => {
-            setTimeout(() => {
-                const $expandedPost = $(expandedPost);
-                if ($expandedPost.find('.backlink').length > 0) {
-                    console.log(`Recursively expanding post at depth ${depth + 1}, index ${index}`);
-                    expandAllQuotes(expandedPost[0], depth + 1, maxDepth);
-                }
-            }, index * 1000); // Stagger recursive expansions
-        });
-    };
-
-    // Enhanced fetchAndProcessPost with recursive tracking
-    async function fetchAndProcessPost(board, postId, $placeholder) {
-        console.log(`Fetching and processing post ${board}:${postId} at depth ${depth}`);
-
-        try {
-            $placeholder.html(`<div class="loading" style="padding: 10px; text-align: center;">Loading post ${postId}... (Depth ${depth})</div>`);
-
-            // Check cache first
-            if (postsObj[postId]) {
-                console.log(`Found post ${postId} in cache`);
-                const data = postsObj[postId];
-                const postElement = createPostElement(data);
-                $placeholder.html(postElement);
-
-                // Add to expanded posts for recursive processing
-                const $createdPost = $placeholder.find('article.post');
-                if (!$createdPost.find('.post_wrapper').length) {
-                    console.warn("Generated post missing .post_wrapper", $createdPost);
-                    return;
-                }
-                if ($createdPost.length > 0) {
-                    expandedPosts.push($createdPost);
-
-                    // Process any backlinks in this post
-                    setTimeout(() => {
-                        processPost($createdPost[0]).catch(console.error);
-                    }, 500);
-                }
-
-                // Process images properly
-                setTimeout(() => {
-                    if (typeof inlineImages === 'function') {
-                        console.log(`Processing images for cached post ${postId}`);
-                        inlineImages($createdPost);
-                    }
-                }, 100);
-
-                processedCount++;
-                updateStatus();
-                return;
-            }
-
-            // Fetch the post
-            const postData = await fetchPost(board, postId);
-
-            if (!postData || postData.error) {
-                $placeholder.html(`<div class="error" style="padding: 10px; color: #c00;">Post not found: ${postData?.error || 'Unknown error'}</div>`);
-                processedCount++;
-                updateStatus();
-                return;
-            }
-
-            // Add to cache
-            postsObj[postId] = postData;
-
-            // Create and insert post element
-            const postElement = createPostElement(postData);
-            $placeholder.html(postElement);
-
-            // Add to expanded posts for recursive processing
-            const $createdPost = $placeholder.find('article.post');
-            if ($createdPost.length > 0) {
-                expandedPosts.push($createdPost);
-
-                // Process any backlinks in this post after a delay
-                setTimeout(() => {
-                    processPost($createdPost[0]).catch(console.error);
-                }, 500);
-            }
-
-            // Process images
-            setTimeout(() => {
-                if ($createdPost.length > 0 && typeof inlineImages === 'function') {
-                    const imageBoxes = $createdPost.find('.thread_image_box').length;
-                    console.log(`Processing images for post ${postId}, found ${imageBoxes} image boxes`);
-                    inlineImages($createdPost);
-                }
-            }, 100);
-
-            processedCount++;
-            updateStatus();
-
-        } catch (error) {
-            console.error(`Error processing post ${board}:${postId}:`, error);
-            $placeholder.html(`<div class="error" style="padding: 10px; color: #c00;">Error: ${error.message || 'Unknown error'}</div>`);
-            processedCount++;
-            updateStatus();
+        
+        // Clean the ID properly
+        if (postId.startsWith('r') || postId.startsWith('#')) {
+            postId = postId.substring(1);
         }
-    }
-
-    // Process backlinks sequentially
-    async function processNextBacklink() {
-        if (index >= backlinks.length) {
-            console.log(`All backlinks processed for depth ${depth}`);
-            return;
-        }
-
-        const link = backlinks[index];
-        console.log(`Processing backlink ${index} at depth ${depth}:`, link);
-        index++;
-
-        try {
+        if (visited.has(postId)) continue;
+        visited.add(postId);
+        
+        const $post = $(post);
+        console.log(`ID: ${postId} Post: ${$post}`)
+        // Add current post to graph
+        const postData = extractPostData($post);
+        postGraph.addPost(postId, postData);
+        
+        // Process backlinks (replies TO this post)
+        const backlinks = $post.find('.backlink').toArray();
+        console.log(`Backlinks: ${backlinks}`)
+        for (const link of backlinks) {
             const $link = $(link);
+            const replyId = $link.data('post');
             const board = $link.data('board');
-            const postId = $link.data('post');
-
-            if (!board || !postId) {
-                console.error("Missing data attributes on backlink", link);
-                processedCount++;
-                updateStatus();
-                setTimeout(processNextBacklink, 50);
-                return;
+            
+            if (replyId && !visited.has(replyId)) {
+                try {
+                    // Fetch reply post data
+                    const replyData = await fetchPost(board, replyId);
+                    if (replyData && !replyData.error) {
+                        postGraph.addPost(replyId, replyData, postId);
+                        
+                        // Create element for further processing
+                        const replyElement = createPostElement(replyData);
+                        const $replyPost = $(replyElement).find('article.post');
+                        if ($replyPost.length > 0) {
+                            toProcess.push($replyPost[0]);
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch reply ${replyId}:`, error);
+                }
             }
-
-            // Skip if already processed in this expansion
-            const postKey = `${board}:${postId}`;
-            if (processedPosts.has(postKey)) {
-                console.log(`Post ${postKey} already processed in this expansion`);
-                processedCount++;
-                updateStatus();
-                setTimeout(processNextBacklink, 50);
-                return;
+        }
+        
+        // Also check if this post quotes others (find parent relationships)
+        const quotes = $post.find('.greentext, .quote').toArray();
+        for (const quote of quotes) {
+            const quoteMatch = $(quote).text().match(/>>(\d+)/);
+            if (quoteMatch) {
+                const quotedId = quoteMatch[1];
+                if (!visited.has(quotedId)) {
+                    // This post quotes quotedId, so quotedId is parent
+                    const existingNode = postGraph.nodes.get(postId);
+                    if (existingNode && !existingNode.parent) {
+                        existingNode.parent = quotedId;
+                        postGraph.addPost(quotedId, null); // Placeholder
+                    }
+                }
             }
-
-            processedPosts.add(postKey);
-
-            // Create placeholder
-            const $placeholder = $('<div class="expanded-post-placeholder"></div>');
-            $placeholder.css({
-                'border': '1px solid #ccc',
-                'margin': '10px 0',
-                'padding': '10px',
-                'background': 'rgba(255, 255, 255, 0.5)',
-                'border-radius': '3px'
-            });
-
-            $expandedContainer.append($placeholder);
-
-            // Fetch and process
-            await fetchAndProcessPost(board, postId, $placeholder);
-
-            // Delay between requests
-            setTimeout(processNextBacklink, 300 + Math.random() * 200);
-
-        } catch (error) {
-            console.error("Error processing backlink:", error);
-            processedCount++;
-            updateStatus();
-            setTimeout(processNextBacklink, 500);
         }
     }
+}
 
-    // Start processing
-    updateStatus();
-    processNextBacklink();
+// Display reply chain in BFS order
+async function displayReplyChain(replyChain, $container) {
+    const $status = $('<div class="chain-status"></div>');
+    $container.append($status);
+    
+    let processed = 0;
+    
+    for (const {id, level, data, replies} of replyChain) {
+        try {
+            // Create level indicator
+            const $levelHeader = $(`<div class="level-${level}" style="margin: 15px 0 5px 0; font-weight: bold; color: #773311;">Level ${level} ${level === 0 ? '(Root/OP)' : `(${replies.length} replies)`}</div>`);
+            $container.append($levelHeader);
+            
+            // Create post container
+            const $postContainer = $('<div class="chain-post"></div>');
+            $postContainer.css({
+                'margin-left': (level * 20) + 'px',
+                'border-left': level > 0 ? '2px solid #ccc' : 'none',
+                'padding-left': level > 0 ? '10px' : '0',
+                'margin-bottom': '10px'
+            });
+            
+            if (data) {
+                const postElement = createPostElement(data);
+                $postContainer.html(postElement);
+                
+                // Process the created post
+                setTimeout(() => {
+                    const $createdPost = $postContainer.find('article.post');
+                    if ($createdPost.length > 0) {
+                        processPost($createdPost[0]).catch(console.error);
+                    }
+                }, 100 * processed);
+            } else {
+                $postContainer.html(`<div class="missing-post">Post ${id} not available</div>`);
+            }
+            
+            $container.append($postContainer);
+            processed++;
+            
+            $status.text(`Displayed: ${processed} / ${replyChain.length} posts`);
+            
+        } catch (error) {
+            console.error(`Error displaying post ${id}:`, error);
+        }
+    }
+    
+    $status.text(`Complete: ${processed} posts in reply chain`);
 }
 
 function getContinentColor(country) {
@@ -1303,6 +1450,19 @@ function getTextColor(bgColor) {
   const brightness = (r * 299 + g * 587 + b * 114) / 1000
   return brightness > 128 ? '#000' : '#fff'
 }
+
+// Helper to extract post data from DOM
+function extractPostData($post) {
+    return {
+        id: $post.attr('id'),
+        content: $post.find('.text').html() || '',
+        author: $post.find('.post_author').text() || 'Anonymous',
+        timestamp: $post.find('.post_data').text() || '',
+        // Add more fields as needed
+    };
+}
+
+
 const processPost = async (post) => {
     if (!post) {
         console.error("processPost called with undefined post");
@@ -1412,7 +1572,7 @@ const processPost = async (post) => {
 
             setTimeout(() => {
                 console.log(`Auto-expanding post ${id} with ${replies.length} replies`);
-                expandAllQuotesInline(post);
+                expandAllQuotes(post);
             }, Math.random() * 2000 + 1000);
         }
 
@@ -1424,77 +1584,6 @@ const processPost = async (post) => {
         addExpandButtonToPost(post);
         processedPosts++;
     }
-    // Process backlinks sequentially
-    async function processNextBacklink() {
-        if (index >= backlinks.length) {
-            console.log("All backlinks processed for this post");
-            return;
-        }
-
-        const link = backlinks[index];
-        console.log("Processing backlink", index, link);
-        index++;
-
-        try {
-            if ($(link).hasClass('expanded-bottom')) {
-                setTimeout(processNextBacklink, 50);
-                return;
-            }
-
-            $(link).addClass('expanded-bottom');
-
-            const $link = $(link);
-            const board = $link.data('board');
-            const postId = $link.data('post');
-
-            if (!board || !postId) {
-                console.error("Missing data attributes on backlink", link);
-                processedCount++;
-                updateStatus();
-                setTimeout(processNextBacklink, 50);
-                return;
-            }
-
-            // Skip if already processed
-            const postKey = `${board}:${postId}`;
-            if (processedPosts.has(postKey)) {
-                processedCount++;
-                updateStatus();
-                setTimeout(processNextBacklink, 50);
-                return;
-            }
-
-            processedPosts.add(postKey);
-
-            // Create placeholder
-            const $placeholder = $('<div class="expanded-post-placeholder"></div>');
-            $placeholder.css({
-                'border': '1px solid #ccc',
-                'margin': '10px 0',
-                'padding': '10px',
-                'background': 'rgba(255, 255, 255, 0.5)',
-                'border-radius': '3px'
-            });
-
-            $expandedContainer.append($placeholder);
-
-            // Fetch and process
-            await fetchAndProcessPost(board, postId, $placeholder);
-
-            // Small delay between requests
-            setTimeout(processNextBacklink, 200 + Math.random() * 300);
-
-        } catch (error) {
-            console.error("Error processing backlink:", error);
-            processedCount++;
-            updateStatus();
-            setTimeout(processNextBacklink, 500);
-        }
-    }
-
-    // Start processing
- //   updateStatus();
-    processNextBacklink();
 }
 // Function to enable/disable auto-expansion
 function toggleAutoExpand() {
@@ -2496,7 +2585,7 @@ function generateFavicons() { // Generate dynamic favicons
     } else {
         var faviconCanvas = document.createElement('canvas');
         var nativeFavicon = $('<img src="/favicon.ico">');
-        var overlayFavicon = $('<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAKT2lDQ1BQaG90b3Nob3AgSUNDIHByb2ZpbGUAAHjanVNnVFPpFj333vRCS4iAlEtvUhUIIFJCi4AUkSYqIQkQSoghodkVUcERRUUEG8igiAOOjoCMFVEsDIoK2AfkIaKOg6OIisr74Xuja9a89+bN/rXXPues852zzwfACAyWSDNRNYAMqUIeEeCDx8TG4eQuQIEKJHAAEAizZCFz/SMBAPh+PDwrIsAHvgABeNMLCADATZvAMByH/w/qQplcAYCEAcB0kThLCIAUAEB6jkKmAEBGAYCdmCZTAKAEAGDLY2LjAFAtAGAnf+bTAICd+Jl7AQBblCEVAaCRACATZYhEAGg7AKzPVopFAFgwABRmS8Q5ANgtADBJV2ZIALC3AMDOEAuyAAgMADBRiIUpAAR7AGDIIyN4AISZABRG8lc88SuuEOcqAAB4mbI8uSQ5RYFbCC1xB1dXLh4ozkkXKxQ2YQJhmkAuwnmZGTKBNA/g88wAAKCRFRHgg/P9eM4Ors7ONo62Dl8t6r8G/yJiYuP+5c+rcEAAAOF0ftH+LC+zGoA7BoBt/qIl7gRoXgugdfeLZrIPQLUAoOnaV/Nw+H48PEWhkLnZ2eXk5NhKxEJbYcpXff5nwl/AV/1s+X48/Pf14L7iJIEyXYFHBPjgwsz0TKUcz5IJhGLc5o9H/LcL//wd0yLESWK5WCoU41EScY5EmozzMqUiiUKSKcUl0v9k4t8s+wM+3zUAsGo+AXuRLahdYwP2SycQWHTA4vcAAPK7b8HUKAgDgGiD4c93/+8//UegJQCAZkmScQAAXkQkLlTKsz/HCAAARKCBKrBBG/TBGCzABhzBBdzBC/xgNoRCJMTCQhBCCmSAHHJgKayCQiiGzbAdKmAv1EAdNMBRaIaTcA4uwlW4Dj1wD/phCJ7BKLyBCQRByAgTYSHaiAFiilgjjggXmYX4IcFIBBKLJCDJiBRRIkuRNUgxUopUIFVIHfI9cgI5h1xGupE7yAAygvyGvEcxlIGyUT3UDLVDuag3GoRGogvQZHQxmo8WoJvQcrQaPYw2oefQq2gP2o8+Q8cwwOgYBzPEbDAuxsNCsTgsCZNjy7EirAyrxhqwVqwDu4n1Y8+xdwQSgUXACTYEd0IgYR5BSFhMWE7YSKggHCQ0EdoJNwkDhFHCJyKTqEu0JroR+cQYYjIxh1hILCPWEo8TLxB7iEPENyQSiUMyJ7mQAkmxpFTSEtJG0m5SI+ksqZs0SBojk8naZGuyBzmULCAryIXkneTD5DPkG+Qh8lsKnWJAcaT4U+IoUspqShnlEOU05QZlmDJBVaOaUt2ooVQRNY9aQq2htlKvUYeoEzR1mjnNgxZJS6WtopXTGmgXaPdpr+h0uhHdlR5Ol9BX0svpR+iX6AP0dwwNhhWDx4hnKBmbGAcYZxl3GK+YTKYZ04sZx1QwNzHrmOeZD5lvVVgqtip8FZHKCpVKlSaVGyovVKmqpqreqgtV81XLVI+pXlN9rkZVM1PjqQnUlqtVqp1Q61MbU2epO6iHqmeob1Q/pH5Z/YkGWcNMw09DpFGgsV/jvMYgC2MZs3gsIWsNq4Z1gTXEJrHN2Xx2KruY/R27iz2qqaE5QzNKM1ezUvOUZj8H45hx+Jx0TgnnKKeX836K3hTvKeIpG6Y0TLkxZVxrqpaXllirSKtRq0frvTau7aedpr1Fu1n7gQ5Bx0onXCdHZ4/OBZ3nU9lT3acKpxZNPTr1ri6qa6UbobtEd79up+6Ynr5egJ5Mb6feeb3n+hx9L/1U/W36p/VHDFgGswwkBtsMzhg8xTVxbzwdL8fb8VFDXcNAQ6VhlWGX4YSRudE8o9VGjUYPjGnGXOMk423GbcajJgYmISZLTepN7ppSTbmmKaY7TDtMx83MzaLN1pk1mz0x1zLnm+eb15vft2BaeFostqi2uGVJsuRaplnutrxuhVo5WaVYVVpds0atna0l1rutu6cRp7lOk06rntZnw7Dxtsm2qbcZsOXYBtuutm22fWFnYhdnt8Wuw+6TvZN9un2N/T0HDYfZDqsdWh1+c7RyFDpWOt6azpzuP33F9JbpL2dYzxDP2DPjthPLKcRpnVOb00dnF2e5c4PziIuJS4LLLpc+Lpsbxt3IveRKdPVxXeF60vWdm7Obwu2o26/uNu5p7ofcn8w0nymeWTNz0MPIQ+BR5dE/C5+VMGvfrH5PQ0+BZ7XnIy9jL5FXrdewt6V3qvdh7xc+9j5yn+M+4zw33jLeWV/MN8C3yLfLT8Nvnl+F30N/I/9k/3r/0QCngCUBZwOJgUGBWwL7+Hp8Ib+OPzrbZfay2e1BjKC5QRVBj4KtguXBrSFoyOyQrSH355jOkc5pDoVQfujW0Adh5mGLw34MJ4WHhVeGP45wiFga0TGXNXfR3ENz30T6RJZE3ptnMU85ry1KNSo+qi5qPNo3ujS6P8YuZlnM1VidWElsSxw5LiquNm5svt/87fOH4p3iC+N7F5gvyF1weaHOwvSFpxapLhIsOpZATIhOOJTwQRAqqBaMJfITdyWOCnnCHcJnIi/RNtGI2ENcKh5O8kgqTXqS7JG8NXkkxTOlLOW5hCepkLxMDUzdmzqeFpp2IG0yPTq9MYOSkZBxQqohTZO2Z+pn5mZ2y6xlhbL+xW6Lty8elQfJa7OQrAVZLQq2QqboVFoo1yoHsmdlV2a/zYnKOZarnivN7cyzytuQN5zvn//tEsIS4ZK2pYZLVy0dWOa9rGo5sjxxedsK4xUFK4ZWBqw8uIq2Km3VT6vtV5eufr0mek1rgV7ByoLBtQFr6wtVCuWFfevc1+1dT1gvWd+1YfqGnRs+FYmKrhTbF5cVf9go3HjlG4dvyr+Z3JS0qavEuWTPZtJm6ebeLZ5bDpaql+aXDm4N2dq0Dd9WtO319kXbL5fNKNu7g7ZDuaO/PLi8ZafJzs07P1SkVPRU+lQ27tLdtWHX+G7R7ht7vPY07NXbW7z3/T7JvttVAVVN1WbVZftJ+7P3P66Jqun4lvttXa1ObXHtxwPSA/0HIw6217nU1R3SPVRSj9Yr60cOxx++/p3vdy0NNg1VjZzG4iNwRHnk6fcJ3/ceDTradox7rOEH0x92HWcdL2pCmvKaRptTmvtbYlu6T8w+0dbq3nr8R9sfD5w0PFl5SvNUyWna6YLTk2fyz4ydlZ19fi753GDborZ752PO32oPb++6EHTh0kX/i+c7vDvOXPK4dPKy2+UTV7hXmq86X23qdOo8/pPTT8e7nLuarrlca7nuer21e2b36RueN87d9L158Rb/1tWeOT3dvfN6b/fF9/XfFt1+cif9zsu72Xcn7q28T7xf9EDtQdlD3YfVP1v+3Njv3H9qwHeg89HcR/cGhYPP/pH1jw9DBY+Zj8uGDYbrnjg+OTniP3L96fynQ89kzyaeF/6i/suuFxYvfvjV69fO0ZjRoZfyl5O/bXyl/erA6xmv28bCxh6+yXgzMV70VvvtwXfcdx3vo98PT+R8IH8o/2j5sfVT0Kf7kxmTk/8EA5jz/GMzLdsAAAAgY0hSTQAAeiUAAICDAAD5/wAAgOkAAHUwAADqYAAAOpgAABdvkl/FRgAAAJZJREFUeNrs2zEOgCAQBEDO+P8vr7XGSEODN1tTkMkdQYRKMjrnGM0DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoEvO3SZcVZ8/M5OUCgAA4D9rwLPnZ/cZXsaXCgAAAAAAAAAAAAAAAAAAAADun8+7vRdwJqgFACyNM0EtAMA+wD5ACwCwBqgAAAB65gIAAP//AwAu8yh1NlUMJAAAAABJRU5ErkJggg==">');
+        var overlayFavicon = $('<img src="data:image/png;base64,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">');
         var ctx = faviconCanvas.getContext('2d');
         nativeFavicon.on('load', function (e) {
             faviconCanvas.height = e.target.naturalHeight;
@@ -4255,1487 +4344,1489 @@ function addFileSelect() {
                     if (fileCount) {
                         $.each(document.getElementById('file_image').files, function (i, file) {
                             var reader = new FileReader();
-                            if (false && /image/.test(file.type)) { // Disable Imgur usage, don't remove code in case it needs to be restored
-                                reader.readAsDataURL(file);
-                                reader.onloadend = function () {
-                                    $.ajax({
-                                        url: "https://api.imgur.com/3/image",
-                                        type: 'POST',
-                                        headers: {
-                                            Authorization: 'Client-ID ' + clientId
-                                        },
-                                        data: {
-                                            image: reader.result.replace(/data:.*;base64,/, ''),
-                                            type: 'base64',
-                                            name: file.name
-                                        }
-                                    }).done(function (response) {
-                                        fileCount--;
-                                        $('#reply_chennodiscursus')[0].value += "\n" + response.data.link.replace(/http:/, 'https:');
-                                        successfulUploads++;
-                                        if (!fileCount) {
-                                            $('#file_image').val('');
-                                            if (successfulUploads === totalUploads) {
-                                                $middleReplySubmit.val('Submitting');
-                                                $('#finalReplySubmit').trigger('click');
-                                            }
-                                        }
-                                    }).fail(function (e) {
-                                        notifyMe("An error occurred whilst uploading", 'http://i.imgur.com/qEpGpTc.png', 'The file was: ' + file.name + '\n' + JSON.parse(e.responseText).data.error, false);
-                                    });
-                                };
-                            } else if (!/application/.test(file.type)) {
-                                var data = new FormData();
-                                data.append('files[]', file);
-                                var xhr = new XMLHttpRequest();
-                                xhr.open('POST', 'https://mixtape.moe/upload.php', true);
-                                xhr.addEventListener('load', function (e) {
-                                    fileCount--;
-                                    $('#reply_chennodiscursus')[0].value += "\n" + JSON.parse(xhr.responseText).files[0].url;
-                                    successfulUploads++;
-                                    if (!fileCount) {
-                                        $('#file_image').val('');
-                                        if (successfulUploads === totalUploads) {
-                                            $middleReplySubmit.val('Submitting');
-                                            $('#finalReplySubmit').trigger('click');
-                                        }
-                                    }
-                                });
-                                xhr.send(data);
-                            } else {
-                                $middleReplySubmit.val('Filetype is not supported').removeAttr('disabled');
-                                setTimeout(function () {
-                                    $middleReplySubmit.val('Submit');
-                                }, 3000);
-                            }
-                        });
-                    }
-                } else {
-                    $middleReplySubmit.val('Submitting').attr('disabled', 'disabled');
+                            
+
+if (false && /image/.test(file.type)) { // Disable Imgur usage, don't remove code in case it needs to be restored
+    reader.readAsDataURL(file);
+    reader.onloadend = function () {
+        $.ajax({
+            url: "https://api.imgur.com/3/image",
+            type: 'POST',
+            headers: {
+                Authorization: 'Client-ID ' + clientId
+            },
+            data: {
+                image: reader.result.replace(/data:.*;base64,/, ''),
+                type: 'base64',
+                name: file.name
+            }
+        }).done(function (response) {
+            fileCount--;
+            $('#reply_chennodiscursus')[0].value += "\n" + response.data.link.replace(/http:/, 'https:');
+            successfulUploads++;
+            if (!fileCount) {
+                $('#file_image').val('');
+                if (successfulUploads === totalUploads) {
+                    $middleReplySubmit.val('Submitting');
                     $('#finalReplySubmit').trigger('click');
                 }
-            });
-            $urlUploadSubmit.on('click', function () {
-                $urlUploadSubmit.val('Uploading...');
-                $.ajax({
-                    url: "https://api.imgur.com/3/image",
-                    type: 'POST',
-                    headers: {
-                        Authorization: 'Client-ID ' + clientId
-                    },
-                    data: {
-                        image: $urlUploadInput[0].value,
-                        type: 'URL'
-                    }
-                }).done(function (response) {
-                    $urlUploadInput[0].value = '';
-                    $('#reply_chennodiscursus')[0].value += "\n" + response.data.link.replace(/http:/, 'https:');
-                }).fail(function (e) {
-                    notifyMe("An error occurred whilst uploading", 'http://i.imgur.com/qEpGpTc.png', 'The link was: ' + $urlUploadInput[0].value + '\n' + JSON.parse(e.responseText).data.error, false);
-                }).always(function () {
-                    $urlUploadSubmit.val('Upload');
-                });
-            });
-        } else {
-            $('#middleReplySubmit').val('Submit').removeAttr('disabled');
+            }
+        }).fail(function (e) {
+            notifyMe("An error occurred whilst uploading", 'http://i.imgur.com/qEpGpTc.png', 'The file was: ' + file.name + '\n' + JSON.parse(e.responseText).data.error, false);
+        });
+    };
+} else if (!/application/.test(file.type)) {
+    var data = new FormData();
+    data.append('files[]', file);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://mixtape.moe/upload.php', true);
+    xhr.addEventListener('load', function (e) {
+        fileCount--;
+        $('#reply_chennodiscursus')[0].value += "\n" + JSON.parse(xhr.responseText).files[0].url;
+        successfulUploads++;
+        if (!fileCount) {
+            $('#file_image').val('');
+            if (successfulUploads === totalUploads) {
+                $middleReplySubmit.val('Submitting');
+                $('#finalReplySubmit').trigger('click');
+            }
         }
-    }
+    });
+    xhr.send(data);
+} else {
+    $middleReplySubmit.val('Filetype is not supported').removeAttr('disabled');
+    setTimeout(function () {
+        $middleReplySubmit.val('Submit');
+    }, 3000);
+}
+});
+}
+} else {
+$middleReplySubmit.val('Submitting').attr('disabled', 'disabled');
+$('#finalReplySubmit').trigger('click');
+}
+});
+$urlUploadSubmit.on('click', function () {
+$urlUploadSubmit.val('Uploading...');
+$.ajax({
+url: "https://api.imgur.com/3/image",
+type: 'POST',
+headers: {
+Authorization: 'Client-ID ' + clientId
+},
+data: {
+image: $urlUploadInput[0].value,
+type: 'URL'
+}
+}).done(function (response) {
+$urlUploadInput[0].value = '';
+$('#reply_chennodiscursus')[0].value += "\n" + response.data.link.replace(/http:/, 'https:');
+}).fail(function (e) {
+notifyMe("An error occurred whilst uploading", 'http://i.imgur.com/qEpGpTc.png', 'The link was: ' + $urlUploadInput[0].value + '\n' + JSON.parse(e.responseText).data.error, false);
+}).always(function () {
+$urlUploadSubmit.val('Upload');
+});
+});
+} else {
+$('#middleReplySubmit').val('Submit').removeAttr('disabled');
+}
+}
 }
 
 function updateExportLink() { // Define the export settings link with the latest version of the settings
-    var $settingsExport = $('#settingsExport');
-    $settingsExport.attr('download', 'SpookyX v.' + GM_info.script.version + '-' + Date.now() + '.json');
-    $settingsExport.attr('href', 'data:' + 'text/plain' + ';charset=utf-8,' + encodeURIComponent(JSON.stringify(settings)));
+var $settingsExport = $('#settingsExport');
+$settingsExport.attr('download', 'SpookyX v.' + GM_info.script.version + '-' + Date.now() + '.json');
+$settingsExport.attr('href', 'data:' + 'text/plain' + ';charset=utf-8,' + encodeURIComponent(JSON.stringify(settings)));
 }
 
 function saveSettings() {
-    settingsStore = {};
-    settingsStore.UserSettings = settingsStrip(settings.UserSettings);
-    settingsStore.FilterSettings = settingsStrip(settings.FilterSettings);
-    localStorage.SpookyXsettings = JSON.stringify(settingsStore); // Save the settings
+settingsStore = {};
+settingsStore.UserSettings = settingsStrip(settings.UserSettings);
+settingsStore.FilterSettings = settingsStrip(settings.FilterSettings);
+localStorage.SpookyXsettings = JSON.stringify(settingsStore); // Save the settings
 }
 
 var hoveredTextColourPicker;
 function revealSpoilers() {
-    if (settings.UserSettings.revealSpoilers.value) {
-        $('#SpookyX-css-hovered-spoilers').html('.spoiler {color:' + hoveredTextColourPicker + '!important;}');
-    } else {
-        $('#SpookyX-css-hovered-spoilers').html('');
-    }
+if (settings.UserSettings.revealSpoilers.value) {
+$('#SpookyX-css-hovered-spoilers').html('.spoiler {color:' + hoveredTextColourPicker + '!important;}');
+} else {
+$('#SpookyX-css-hovered-spoilers').html('');
+}
 }
 
 $(document).ready(function () {
-    var $body = $('body');
-    var $head = $('head');
-    $body.append('<div id="postBackgroundColourPicker" class="thread_form_wrap" style="display:none;"></div>'); // Create an element to get the post colour from
-    var $postBackgroundColourPicker = $('#postBackgroundColourPicker');
-    var postBackgroundColourPicker = $postBackgroundColourPicker.css('background-color'); // Set the colour
-    $postBackgroundColourPicker.remove(); // Delete the element afterwards
+var $body = $('body');
+var $head = $('head');
+$body.append('<div id="postBackgroundColourPicker" class="thread_form_wrap" style="display:none;"></div>'); // Create an element to get the post colour from
+var $postBackgroundColourPicker = $('#postBackgroundColourPicker');
+var postBackgroundColourPicker = $postBackgroundColourPicker.css('background-color'); // Set the colour
+$postBackgroundColourPicker.remove(); // Delete the element afterwards
 
-    var mockHoverFailed = false;
-    try { // Firefox can fail with a security error (something to do with stylesheets from multiple domains)
-        allowMockHover(); // Process the stylesheets to add a custom class to all hovered element instances so that we can force the style on a test element
-    } catch (e) {
-        mockHoverFailed = true;
-    }
-    var $hoveredTextColourPicker = $('<div class="spoiler mock-hover" style="position: fixed; top: -1000px;">hoveredTextColourPicker</div>'); // Create an element to get the hovered text colour from
-    $body.append($hoveredTextColourPicker);
-    hoveredTextColourPicker = $hoveredTextColourPicker.css('color'); // Set the colour
-    if (mockHoverFailed) {
-        // Use inverted regular font colour then
-        hoveredTextColourPicker = hoveredTextColourPicker.replace(/([0-9]+)[^0-9]+([0-9]+)[^0-9]+([0-9]+)/, function ($0, $1, $2, $3) {
-            return (255 - $1) + ', ' + (255 - $2) + ', ' + (255 - $3);
-        });
-    }
-    $hoveredTextColourPicker.remove(); // Delete the element afterwards
+var mockHoverFailed = false;
+try { // Firefox can fail with a security error (something to do with stylesheets from multiple domains)
+allowMockHover(); // Process the stylesheets to add a custom class to all hovered element instances so that we can force the style on a test element
+} catch (e) {
+mockHoverFailed = true;
+}
+var $hoveredTextColourPicker = $('<div class="spoiler mock-hover" style="position: fixed; top: -1000px;">hoveredTextColourPicker</div>'); // Create an element to get the hovered text colour from
+$body.append($hoveredTextColourPicker);
+hoveredTextColourPicker = $hoveredTextColourPicker.css('color'); // Set the colour
+if (mockHoverFailed) {
+// Use inverted regular font colour then
+hoveredTextColourPicker = hoveredTextColourPicker.replace(/([0-9]+)[^0-9]+([0-9]+)[^0-9]+([0-9]+)/, function ($0, $1, $2, $3) {
+return (255 - $1) + ', ' + (255 - $2) + ', ' + (255 - $3);
+});
+}
+$hoveredTextColourPicker.remove(); // Delete the element afterwards
 
-    $head.after('<style type="text/css" id="SpookyX-css"></style>');
-    $head.after('<style type="text/css" id="SpookyX-css-word-break"></style>'); // Add style element that controls that one thing
-    $head.after('<style type="text/css" id="SpookyX-css-hovered-spoilers"></style>'); // Add style element that controls that one thing
-    $('#SpookyX-css').append('.imgur-embed-iframe-pub{float: left; margin: 10px 10px 0 0!important;}.post_wrapper .pull-left, article.backlink_container > div#backlink .pull-left{display:none;}' +
-        '#gallery{position:fixed; width:100%; height:100%; top:0; left:0; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.7);}.unseenPost{border-top: red solid 1px;}' +
-        '.hoverImage{position:fixed;float:none!important;}.bigImage{opacity: 1!important; max-width:100%;}.smallImage{max-width:' + imageWidth + 'px; max-height:' + imageHeight + 'px}' +
-        '.smallImage.thread_image{max-width:' + imageWidthOP + 'px; max-height:' + imageHeightOP + 'px}.spoilerImage{opacity: 0.1}.spoilerText{position: relative; height: 0px; font-size: 19px; top: 47px;}' +
-        '.forwarded{display:none!important}.inline{border:1px solid; display: table; margin: 2px 0;}.inlined{opacity:0.5}.post_wrapper{border-right: 1px solid #cccccc;}' +
-        '.theme_default.midnight .post_wrapper{border-right: 0;}.post_wrapperInline{border-right:0!important; border-bottom:0!important;}.quickReply{position: fixed; top: 0; right: 0; margin:21px 3px !important;}' +
-        '.shitpost{opacity: 0.3}.embedded_post_file{margin: 0!important; max-width: ' + imageWidth + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}' +
-        '.headerBar{float:right; display:inline-block; z-index:10;}.threadStats{display:inline;}#settingsMenu{position: fixed; height: 550px; max-height: 100%; width: 900px; max-width: 100%; margin: auto; padding:' +
-        ' 0; top: 50%; left: 50%; -moz-transform: translate(-50%, -50%); -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);z-index: 999; border: 2px solid #364041;}' +
-        '.sections-list{padding: 3px 6px; float: left;}.credits{padding: 3px 6px; float: right;}#menuSeparator{width:100%; border-top:1px solid #364041; float:left; position:relative; top:-2px;}' +
-        '.sections-list a.active{font-weight: 700;}.sections-list a{text-decoration: underline;}#settingsMenu label{display: inline; text-decoration: underline; cursor: pointer;}' +
-        '#settingsContent{position: absolute; overflow: auto; top: 1.8em; bottom: 0; left: 0; right: 0; padding: 0;}#settingsContent > div{padding: 3px;}.suboption-list{position: relative;}' +
-        '.suboption-list::before{content: ""; display: inline-block; position: absolute; left: .7em; width: 0; height: 100%; border-left: 1px solid;}.suboption-list > div::before{content: ""; display: inline-block;' +
-        ' position: absolute; left: .7em; width: .7em; height: .6em; border-left: 1px solid; border-bottom: 1px solid;}.suboption-list > div{position: relative; padding-left: 1.4em;}' +
-        '.suboption-list > div:last-of-type {background-color:' + postBackgroundColourPicker + ';}#settingsMenu input{margin: 3px 3px 3px 4px; padding-top:1px; padding-bottom:0; padding-right:0;}' +
-        '#settingsMenu select{margin: 3px 3px 3px 4px; padding-left: 2px; padding-top: 0px; padding-bottom: 0px; padding-right: 0; height: 19px; width: auto;}#settingsMenu input[type="text"]{height:16px; line-height:0;}' +
-        '#settingsMenu input[type="number"]{height:16px; line-height:0; width:44px;}.last{background-color:' + postBackgroundColourPicker + ';}#settingsMenu code{padding: 2px 4px; background-color: #f7f7f9!important; ' +
-        'border: 1px solid #e1e1e8!important;}.filters-list{padding: 0 3px;}.filters-list a.active{font-weight: 700;}.filters-list a{text-decoration: underline;}#Filter textarea {margin:0; height: 493px; ' +
-        'font-family:monospace; min-width:100%; max-width:100%;}#Filter > div{margin-right:14px;}.shortcutHidden{display:none!important;}.letters{margin-top:0!important;}' +
-        '#headerFixed{position:fixed; left:-1px; right:-1px; top:-1px; padding:0 10px 0 30px; border:#252525 1px solid; z-index:1;}#headerStatic{position:static; padding: 0px 10px 0 30px;}' +
-        '.threadStats{margin-right:20px;}#settingsMenu .description{margin-left:2px; flex-shrink: 9999;}.selectDescription{margin-top:3px;}#settingsMenu label{margin-bottom:0}' +
-        '.settingsJoinLine{border-left:solid 1px; position:relative; left:0.7em; top: 1.9em;}.settingsJoinLineCheckbox{top: 1.4em;}.settingFlexContainer{display:flex;}#footer{min-height:28px; height:initial!important;}' +
-        '.footer_text{margin-bottom:0!important;}');
-    if (settings.UserSettings.favicon.value) {
-        $('head').append('<link id="favicon" rel="shortcut icon" type="image/png">');
-        generateFavicons();
-        $('#reply fieldset .progress').after('<canvas id="myCanvas" width="64" height="64" style="float:left; display:none; position: relative; top: -10px; left: -10px;"></canvas>');
+$head.after('<style type="text/css" id="SpookyX-css"></style>');
+$head.after('<style type="text/css" id="SpookyX-css-word-break"></style>'); // Add style element that controls that one thing
+$head.after('<style type="text/css" id="SpookyX-css-hovered-spoilers"></style>'); // Add style element that controls that one thing
+$('#SpookyX-css').append('.imgur-embed-iframe-pub{float: left; margin: 10px 10px 0 0!important;}.post_wrapper .pull-left, article.backlink_container > div#backlink .pull-left{display:none;}' +
+'#gallery{position:fixed; width:100%; height:100%; top:0; left:0; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.7);}.unseenPost{border-top: red solid 1px;}' +
+'.hoverImage{position:fixed;float:none!important;}.bigImage{opacity: 1!important; max-width:100%;}.smallImage{max-width:' + imageWidth + 'px; max-height:' + imageHeight + 'px}' +
+'.smallImage.thread_image{max-width:' + imageWidthOP + 'px; max-height:' + imageHeightOP + 'px}.spoilerImage{opacity: 0.1}.spoilerText{position: relative; height: 0px; font-size: 19px; top: 47px;}' +
+'.forwarded{display:none!important}.inline{border:1px solid; display: table; margin: 2px 0;}.inlined{opacity:0.5}.post_wrapper{border-right: 1px solid #cccccc;}' +
+'.theme_default.midnight .post_wrapper{border-right: 0;}.post_wrapperInline{border-right:0!important; border-bottom:0!important;}.quickReply{position: fixed; top: 0; right: 0; margin:21px 3px !important;}' +
+'.shitpost{opacity: 0.3}.embedded_post_file{margin: 0!important; max-width: ' + imageWidth + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}' +
+'.headerBar{float:right; display:inline-block; z-index:10;}.threadStats{display:inline;}#settingsMenu{position: fixed; height: 550px; max-height: 100%; width: 900px; max-width: 100%; margin: auto; padding:' +
+' 0; top: 50%; left: 50%; -moz-transform: translate(-50%, -50%); -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);z-index: 999; border: 2px solid #364041;}' +
+'.sections-list{padding: 3px 6px; float: left;}.credits{padding: 3px 6px; float: right;}#menuSeparator{width:100%; border-top:1px solid #364041; float:left; position:relative; top:-2px;}' +
+'.sections-list a.active{font-weight: 700;}.sections-list a{text-decoration: underline;}#settingsMenu label{display: inline; text-decoration: underline; cursor: pointer;}' +
+'#settingsContent{position: absolute; overflow: auto; top: 1.8em; bottom: 0; left: 0; right: 0; padding: 0;}#settingsContent > div{padding: 3px;}.suboption-list{position: relative;}' +
+'.suboption-list::before{content: ""; display: inline-block; position: absolute; left: .7em; width: 0; height: 100%; border-left: 1px solid;}.suboption-list > div::before{content: ""; display: inline-block;' +
+' position: absolute; left: .7em; width: .7em; height: .6em; border-left: 1px solid; border-bottom: 1px solid;}.suboption-list > div{position: relative; padding-left: 1.4em;}' +
+'.suboption-list > div:last-of-type {background-color:' + postBackgroundColourPicker + ';}#settingsMenu input{margin: 3px 3px 3px 4px; padding-top:1px; padding-bottom:0; padding-right:0;}' +
+'#settingsMenu select{margin: 3px 3px 3px 4px; padding-left: 2px; padding-top: 0px; padding-bottom: 0px; padding-right: 0; height: 19px; width: auto;}#settingsMenu input[type="text"]{height:16px; line-height:0;}' +
+'#settingsMenu input[type="number"]{height:16px; line-height:0; width:44px;}.last{background-color:' + postBackgroundColourPicker + ';}#settingsMenu code{padding: 2px 4px; background-color: #f7f7f9!important; ' +
+'border: 1px solid #e1e1e8!important;}.filters-list{padding: 0 3px;}.filters-list a.active{font-weight: 700;}.filters-list a{text-decoration: underline;}#Filter textarea {margin:0; height: 493px; ' +
+'font-family:monospace; min-width:100%; max-width:100%;}#Filter > div{margin-right:14px;}.shortcutHidden{display:none!important;}.letters{margin-top:0!important;}' +
+'#headerFixed{position:fixed; left:-1px; right:-1px; top:-1px; padding:0 10px 0 30px; border:#252525 1px solid; z-index:1;}#headerStatic{position:static; padding: 0px 10px 0 30px;}' +
+'.threadStats{margin-right:20px;}#settingsMenu .description{margin-left:2px; flex-shrink: 9999;}.selectDescription{margin-top:3px;}#settingsMenu label{margin-bottom:0}' +
+'.settingsJoinLine{border-left:solid 1px; position:relative; left:0.7em; top: 1.9em;}.settingsJoinLineCheckbox{top: 1.4em;}.settingFlexContainer{display:flex;}#footer{min-height:28px; height:initial!important;}' +
+'.footer_text{margin-bottom:0!important;}');
+if (settings.UserSettings.favicon.value) {
+$('head').append('<link id="favicon" rel="shortcut icon" type="image/png">');
+generateFavicons();
+$('#reply fieldset .progress').after('<canvas id="myCanvas" width="64" height="64" style="float:left; display:none; position: relative; top: -10px; left: -10px;"></canvas>');
+}
+$body.append('<div id="hoverUI"></div>');
+var $letters = $('.letters');
+if ($letters.length === 0) {
+$body.prepend('<div class="letters"></div>'); // Add the letters bar if it's not present
+$letters = $('.letters'); // Refresh selector
+}
+$letters.prependTo('.container-fluid'); // Move it to remove the unecessary scrolling on certain pages
+if ($letters.length) {
+$letters.html('<span class="boardList">' + $letters.html() + '</span><span class="headerBar"><div class="threadStats"></div><a title="SpookyX Settings" href="javascript:;" style="margin-right:10px;">Settings</a></span>');
+$letters.clone().hide().insertAfter('.letters');
+$letters = $('.letters'); // Refresh selector
+$letters[0].id = "headerStatic";
+$letters[1].id = "headerFixed";
+} else { // Insert settings link when on board index
+$('.container-fluid').append('<div class="headerBar" style="position: fixed; right: 0; top: 0;"><a title="SpookyX Settings" href="javascript:;">Settings</a></div>');
+}
+$body.append('<div id="settingsMenu" class="thread_form_wrap" style="display: none;"><input type="file" id="fileInput" style="display:none;"><div id="settingsHeader"><div class="sections-list"><a href="javascript:;" class="active">Main</a> | <a href="javascript:;">Filter</a></div><div class="credits"><a id="settingsExport" title="Export" href="javascript:;">Export</a> | <a id="settingsImport" title="Import" href="javascript:;">Import</a> | <a title="Reset Settings" href="javascript:;">Reset Settings</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX" style="text-decoration: underline;">SpookyX</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX/blob/master/CHANGELOG.md" style="text-decoration: underline;">v.' + GM_info.script.version + '</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX/issues" style="text-decoration: underline;">Issues</a> | <a title="Close" href="javascript:;">Close</a></div></div><div id="menuSeparator"></div><div id="settingsContent"></div></div>');
+if (settings.UserSettings.gallery.value) {
+$('body').append('<div id="gallery" style="display:none;"></div>');
+}
+if (Page.is('thread')) { // If in a thread
+$($('.navbar .nav')[1]).append('<li><a href="//boards.4chan.org/' + board + '/thread/' + threadID + '">View thread on 4chan</a></li>'); // Add view thread on 4chan link
+}
+$('.headerBar > a[title="SpookyX Settings"], a[title=Close]').on('click', function () {
+populateSettingsMenu();
+});
+$(window).on('scroll', function () {
+if (window.scrollY > 40) {
+$('#headerFixed').show();
+} else {
+$('#headerFixed').hide();
+}
+});
+if (window.scrollY > 42) { // Show headerbar on pageload if necessary
+$('#headerFixed').show();
+}
+$('.sections-list').on('click', function (e) { // Main settings tabs change on click
+if (e.target.tagName === "A") {
+$('#settingsContent #' + $('.sections-list .active').html()).hide();
+$('.sections-list .active').removeClass('active');
+$(e.target).addClass('active');
+$('#settingsContent #' + $('.sections-list .active').html()).show();
+}
+});
+$('#settingsContent').on('click', function (e) { // Filter subtabs change on click
+if (e.target.parentNode.className === "filters-list") {
+var filterSubmenu = $(e.target).attr('name');
+$('#filter_' + $('.filters-list .active').attr('name')).hide();
+$('.filters-list .active').removeClass('active');
+$('.filters-list > a[name=' + filterSubmenu + ']').addClass('active');
+$('#filter_' + filterSubmenu).show();
+}
+});
+$('#settingsMenu .credits > a').on('click', function (e) { // Set up the import/export/reset links
+if (e.target.title === "Import") { // Import settings
+$('#fileInput').trigger('click');
+} else if (e.target.title === "Reset Settings") {
+settings = jQuery.extend(true, {}, defaultSettings);
+saveSettings(); // Save the settings
+populateSettingsMenu(); // Double populate to display changed settings
+populateSettingsMenu();
+}
+});
+$('#fileInput').on('change', function () { // When the undisplayed file input element changes import settings
+if (typeof window.FileReader !== 'function') {
+alert("The file API isn't supported on this browser.");
+return;
+}
+var input = document.getElementById('fileInput');
+var file = input.files[0];
+if (!input.files[0]) {
+alert("Please select a file.");
+} else {
+var fr = new FileReader();
+fr.onload = function () {
+settings = JSON.parse(fr.result);
+saveSettings(); // Save the settings
+populateSettingsMenu(); // Double populate to display changed settings
+populateSettingsMenu();
+alert("Saved settings applied.");
+};
+fr.readAsText(file);
+}
+});
+$('#settingsContent').on('change', function (e) {
+if ($(e.target).hasClass('filterTextarea')) {
+var store = [];
+$.each(e.target.value.split('\n'), function (i, line) {
+var lineStore = {};
+if (line.trim().substr(0, 1) == "#") {
+lineStore.comment = line;
+} else {
+line = line.replace(/\\;/g, '<delimitedSemiColon>');
+$.each(line.split(';'), function (i, fragment) {
+if (fragment !== "") {
+if (!i) {
+    var regex = fragment.trim().replace(/<delimitedSemiColon>/g, ';');
+    if ((/[gim]/).test(regex.substring(regex.length - 1))) {
+        lineStore.regex = {
+            "pattern": regex.substring(1, regex.length - 2),
+            "flag": regex.substring(regex.length - 1)
+        };
+    } else {
+        lineStore.regex = { "pattern": regex.substring(1, regex.length - 1), "flag": "" };
     }
-    $body.append('<div id="hoverUI"></div>');
-    var $letters = $('.letters');
-    if ($letters.length === 0) {
-        $body.prepend('<div class="letters"></div>'); // Add the letters bar if it's not present
-        $letters = $('.letters'); // Refresh selector
+} else {
+    var components = fragment.split(':');
+    lineStore[components.shift().trim().replace(/<delimitedSemiColon>/g, ';')] = components.join(':').trim().replace(/<delimitedSemiColon>/g, ';');
+}
+}
+});
+if (lineStore.regex !== undefined) {
+lineStore.comment = false;
+}
+}
+store.push(lineStore);
+});
+settings.FilterSettings[$(e.target).attr('name')].value = store;
+} else {
+var value;
+var elementPath = $(e.target).attr('path');
+var settingPath = objpath(settings.UserSettings, elementPath);
+if (e.target.type === "checkbox") {
+if (e.target.name === "Filter") {
+if (settings.UserSettings.filter.value) {
+$('#filterDisabledMessage').show();
+} else {
+$('#filterDisabledMessage').hide();
+}
+}
+value = e.target.checked;
+$(e.target).closest('div:not(.settingFlexContainer)').children('.suboption-list').toggle(); // Make parent checkboxes collapse the suboptions if they're unticked
+$(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').toggle();
+} else {
+value = e.target.value;
+}
+if (e.target.nodeName == "SELECT") {
+settingPath.value.value = value;
+var testPatt = new RegExp(value);
+for (var suboption in settingPath.suboptions) {
+if (settingPath.suboptions.hasOwnProperty(suboption) && settingPath.suboptions[suboption].if !== undefined) {
+var ifMet = false;
+$.each(settingPath.suboptions[suboption].if, function (i, v) {
+if (testPatt.test(v)) {
+    ifMet = true;
+    return false;
+}
+});
+if (ifMet) {
+$(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list [key=' + suboption + ']').closest('div:not(.settingFlexContainer)').show();
+} else {
+$(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list [key=' + suboption + ']').closest('div:not(.settingFlexContainer)').hide();
+}
+$(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > .last').removeClass('last');
+$(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > :visible:last').addClass('last');
+if ($(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > :visible').length > 1) {
+$(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').show();
+} else {
+$(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').hide();
+}
+}
+}
+} else {
+settingPath.value = value;
+}
+if (elementPath.substr(0, 6) === "mascot") { // Live update changes in mascot settings
+if (e.target.name === "Mascot image" || e.target.name === "Mascot") {
+mascot(parseMascotImageValue());
+} else {
+mascot('');
+}
+} else if (elementPath.substr(0, 8) === "postFlow") {
+postFlow();
+} else if (elementPath.substr(0, 14) === "adjustReplybox") {
+adjustReplybox();
+} else if (elementPath.substr(0, 11) === "postCounter") {
+postCounter();
+} else if (elementPath.substr(0, 9) === "headerBar") {
+headerBar();
+} else if (elementPath === "revealSpoilers") {
+revealSpoilers();
+}
+}
+if (e.target.name === "Custom Favicons" || (e.target.name === "Favicon" && e.target.checked)) {
+generateFavicons();
+}
+saveSettings(); // Save the settings
+updateExportLink(); // Recreate the export link
+});
+if (settings.UserSettings.postCounter.suboptions.countUnloaded.value) {
+if (Page.is('thread')) { // Count the posts that aren't loaded (eg. in last/50 mode)
+$.ajax({
+url: "/_/api/chan/thread/",
+method: "GET",
+data: { "board": board, "num": threadID, "inThread": true }
+}).done(function (response) {
+var firstLoadedPostID = $('article.post').length ? $('article.post')[0].id : null;
+if (response[threadID].posts) {
+var postList = Object.keys(response[threadID].posts);
+if (postList) {
+for (var i = 0, len = postList.length; i < len; i++) {
+if (postList[i] !== firstLoadedPostID) {
+    notLoadedPostCount++;
+} else {
+    break;
+}
+}
+}
+}
+postCounter();
+});
+}
+}
+if (Page.is('thread')) {
+windowFocus = document.hasFocus();
+$(window).focus(function () {
+windowFocus = true;
+ThreadUpdate();
+});
+$(window).blur(function () {
+windowFocus = false;
+});
+$('#' + unseenPosts[0]).addClass('unseenPost'); // Add the unseen class to the first of the unseen posts
+}
+if (settings.UserSettings.labelYourPosts.value) {
+for (var boardVal in yourPosts) {
+if (yourPosts.hasOwnProperty(boardVal)) {
+yourPostsLookup[boardVal] = {};
+for (var thread in yourPosts[boardVal]) {
+if (yourPosts[boardVal].hasOwnProperty(thread)) {
+var threadLength = yourPosts[boardVal][thread].length;
+var threadArray = yourPosts[boardVal][thread];
+for (var i = 0; i < threadLength; i++) {
+yourPostsLookup[boardVal][threadArray[i]] = true;
+}
+}
+}
+}
+}
+if (Page.is('thread')) {
+postSubmitEvent();
+}
+}
+
+if (!Page.is('search,other,statistics')) {
+var $newPost, postID, response;
+$(document).ajaxComplete(function (event, request, ajaxSettings) {
+if (!/inThread=true/i.test(ajaxSettings.url) && /api\/chan\/thread\/\?/i.test(ajaxSettings.url) || ((ajaxSettings.type === 'POST') && /\/submit\//i.test(ajaxSettings.url))) {
+console.log(ajaxSettings.url);
+console.log(request.responseText);
+if (request.responseText !== '') {
+try {
+if (request.responseText.charAt(0) === '<') {
+console.log('The following is the request responseText:');
+console.log(request.responseText);
+response = {
+    "error": "SpookyX encountered an error when parsing the response. The connection" +
+        " probably timed out. Feel free to give Fiddlekins the console log to have a look at."
+};
+} else {
+response = JSON.parse(request.responseText);
+}
+} catch (e) {
+response = { "error": "SpookyX encountered an error when parsing the response." };
+console.log('The following is the request responseText:');
+console.log(request.responseText);
+alert('A nasty error has occurred. Please take a screenshot of your console and give it to ' +
+'Fiddlekins to deal with.\n\n(You can typically access the console by pressing ctrl+shift+J ' +
+'or pressing F12 and navigating to the console tab.)');
+}
+} else {
+response = { "error": "No responseText" };
+}
+if (Page.is('thread')) {
+if (ajaxSettings.type === 'POST') {
+if (response.error === undefined) {
+if (response.captcha) { // If you are required to fill a captcha before posting
+    //console.log(response);
+} else {
+    for (postID in response[threadID].posts) {
+        if (response[threadID].posts.hasOwnProperty(postID) && response[threadID].posts[postID].comment.replace(/[\r\n]/g, '') == lastSubmittedContent.replace(/[\r\n]/g, '')) {
+            yourPosts[board][threadID].push(postID);
+            $newPost = $('#' + postID);
+            $newPost.find('.post_author').after('<span> (You)</span>');
+            if (settings.UserSettings.filter.value) {
+                filter($newPost);
+            } // Apply filter
+        }
     }
-    $letters.prependTo('.container-fluid'); // Move it to remove the unecessary scrolling on certain pages
-    if ($letters.length) {
-        $letters.html('<span class="boardList">' + $letters.html() + '</span><span class="headerBar"><div class="threadStats"></div><a title="SpookyX Settings" href="javascript:;" style="margin-right:10px;">Settings</a></span>');
-        $letters.clone().hide().insertAfter('.letters');
-        $letters = $('.letters'); // Refresh selector
-        $letters[0].id = "headerStatic";
-        $letters[1].id = "headerFixed";
-    } else { // Insert settings link when on board index
-        $('.container-fluid').append('<div class="headerBar" style="position: fixed; right: 0; top: 0;"><a title="SpookyX Settings" href="javascript:;">Settings</a></div>');
-    }
-    $body.append('<div id="settingsMenu" class="thread_form_wrap" style="display: none;"><input type="file" id="fileInput" style="display:none;"><div id="settingsHeader"><div class="sections-list"><a href="javascript:;" class="active">Main</a> | <a href="javascript:;">Filter</a></div><div class="credits"><a id="settingsExport" title="Export" href="javascript:;">Export</a> | <a id="settingsImport" title="Import" href="javascript:;">Import</a> | <a title="Reset Settings" href="javascript:;">Reset Settings</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX" style="text-decoration: underline;">SpookyX</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX/blob/master/CHANGELOG.md" style="text-decoration: underline;">v.' + GM_info.script.version + '</a> | <a target="_blank" href="https://github.com/Fiddlekins/SpookyX/issues" style="text-decoration: underline;">Issues</a> | <a title="Close" href="javascript:;">Close</a></div></div><div id="menuSeparator"></div><div id="settingsContent"></div></div>');
-    if (settings.UserSettings.gallery.value) {
-        $('body').append('<div id="gallery" style="display:none;"></div>');
-    }
-    if (Page.is('thread')) { // If in a thread
-        $($('.navbar .nav')[1]).append('<li><a href="//boards.4chan.org/' + board + '/thread/' + threadID + '">View thread on 4chan</a></li>'); // Add view thread on 4chan link
-    }
-    $('.headerBar > a[title="SpookyX Settings"], a[title=Close]').on('click', function () {
-        populateSettingsMenu();
-    });
-    $(window).on('scroll', function () {
-        if (window.scrollY > 40) {
-            $('#headerFixed').show();
-        } else {
-            $('#headerFixed').hide();
-        }
-    });
-    if (window.scrollY > 42) { // Show headerbar on pageload if necessary
-        $('#headerFixed').show();
-    }
-    $('.sections-list').on('click', function (e) { // Main settings tabs change on click
-        if (e.target.tagName === "A") {
-            $('#settingsContent #' + $('.sections-list .active').html()).hide();
-            $('.sections-list .active').removeClass('active');
-            $(e.target).addClass('active');
-            $('#settingsContent #' + $('.sections-list .active').html()).show();
-        }
-    });
-    $('#settingsContent').on('click', function (e) { // Filter subtabs change on click
-        if (e.target.parentNode.className === "filters-list") {
-            var filterSubmenu = $(e.target).attr('name');
-            $('#filter_' + $('.filters-list .active').attr('name')).hide();
-            $('.filters-list .active').removeClass('active');
-            $('.filters-list > a[name=' + filterSubmenu + ']').addClass('active');
-            $('#filter_' + filterSubmenu).show();
-        }
-    });
-    $('#settingsMenu .credits > a').on('click', function (e) { // Set up the import/export/reset links
-        if (e.target.title === "Import") { // Import settings
-            $('#fileInput').trigger('click');
-        } else if (e.target.title === "Reset Settings") {
-            settings = jQuery.extend(true, {}, defaultSettings);
-            saveSettings(); // Save the settings
-            populateSettingsMenu(); // Double populate to display changed settings
-            populateSettingsMenu();
-        }
-    });
-    $('#fileInput').on('change', function () { // When the undisplayed file input element changes import settings
-        if (typeof window.FileReader !== 'function') {
-            alert("The file API isn't supported on this browser.");
-            return;
-        }
-        var input = document.getElementById('fileInput');
-        var file = input.files[0];
-        if (!input.files[0]) {
-            alert("Please select a file.");
-        } else {
-            var fr = new FileReader();
-            fr.onload = function () {
-                settings = JSON.parse(fr.result);
-                saveSettings(); // Save the settings
-                populateSettingsMenu(); // Double populate to display changed settings
-                populateSettingsMenu();
-                alert("Saved settings applied.");
-            };
-            fr.readAsText(file);
-        }
-    });
-    $('#settingsContent').on('change', function (e) {
-        if ($(e.target).hasClass('filterTextarea')) {
-            var store = [];
-            $.each(e.target.value.split('\n'), function (i, line) {
-                var lineStore = {};
-                if (line.trim().substr(0, 1) == "#") {
-                    lineStore.comment = line;
-                } else {
-                    line = line.replace(/\\;/g, '<delimitedSemiColon>');
-                    $.each(line.split(';'), function (i, fragment) {
-                        if (fragment !== "") {
-                            if (!i) {
-                                var regex = fragment.trim().replace(/<delimitedSemiColon>/g, ';');
-                                if ((/[gim]/).test(regex.substring(regex.length - 1))) {
-                                    lineStore.regex = {
-                                        "pattern": regex.substring(1, regex.length - 2),
-                                        "flag": regex.substring(regex.length - 1)
-                                    };
-                                } else {
-                                    lineStore.regex = { "pattern": regex.substring(1, regex.length - 1), "flag": "" };
-                                }
-                            } else {
-                                var components = fragment.split(':');
-                                lineStore[components.shift().trim().replace(/<delimitedSemiColon>/g, ';')] = components.join(':').trim().replace(/<delimitedSemiColon>/g, ';');
-                            }
-                        }
-                    });
-                    if (lineStore.regex !== undefined) {
-                        lineStore.comment = false;
-                    }
+    crosslinkTracker = JSON.parse(localStorage.crosslinkTracker);
+    for (var boardVal in crosslinkTracker) {
+        if (crosslinkTracker.hasOwnProperty(boardVal)) {
+            for (var threadVal in crosslinkTracker[boardVal]) {
+                if (crosslinkTracker[boardVal].hasOwnProperty(threadVal)) {
+                    crosslinkTracker[boardVal][threadVal][board] = true;
                 }
-                store.push(lineStore);
-            });
-            settings.FilterSettings[$(e.target).attr('name')].value = store;
-        } else {
-            var value;
-            var elementPath = $(e.target).attr('path');
-            var settingPath = objpath(settings.UserSettings, elementPath);
-            if (e.target.type === "checkbox") {
-                if (e.target.name === "Filter") {
-                    if (settings.UserSettings.filter.value) {
-                        $('#filterDisabledMessage').show();
-                    } else {
-                        $('#filterDisabledMessage').hide();
-                    }
-                }
-                value = e.target.checked;
-                $(e.target).closest('div:not(.settingFlexContainer)').children('.suboption-list').toggle(); // Make parent checkboxes collapse the suboptions if they're unticked
-                $(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').toggle();
-            } else {
-                value = e.target.value;
             }
-            if (e.target.nodeName == "SELECT") {
-                settingPath.value.value = value;
-                var testPatt = new RegExp(value);
-                for (var suboption in settingPath.suboptions) {
-                    if (settingPath.suboptions.hasOwnProperty(suboption) && settingPath.suboptions[suboption].if !== undefined) {
-                        var ifMet = false;
-                        $.each(settingPath.suboptions[suboption].if, function (i, v) {
-                            if (testPatt.test(v)) {
-                                ifMet = true;
+        }
+    }
+    localStorage.crosslinkTracker = JSON.stringify(crosslinkTracker);
+    saveYourPosts();
+
+    labelNewPosts(Object.keys(response[threadID].posts), false);
+    addFileSelect(); // Refresh the added file upload
+}
+} else {
+if (settings.UserSettings.notifications.value) {
+    notifyMe("An error occurred whilst posting", faviconNotification, response.error, false);
+}
+}
+$('#middleReplySubmit').val('Submit').removeAttr('disabled'); // Reset submit button
+} else {
+if (response.error !== undefined) {
+//console.log(response.error);
+} else {
+if (response[threadID] !== undefined) {
+    for (postID in response[threadID].posts) {
+        if (settings.UserSettings.filter.value) {
+            filter($('#' + postID));
+        } // Apply filter
+    }
+    labelNewPosts(Object.keys(response[threadID].posts), false);
+    addFileSelect(); // Refresh the added file upload
+} else {
+    //console.log("Not in a thread");
+}
+}
+}
+}
+
+for (var key in response) {
+if (response.hasOwnProperty(key) && response[key] !== null && response[key].posts !== undefined) {
+if (Page.is('board') && settings.UserSettings.labelYourPosts.value) { // Handle (You) deignation for expanding threads on board view
+labelNewPosts(Object.keys(response[key].posts), true);
+}
+for (postID in response[key].posts) {
+if (response[key].posts.hasOwnProperty(postID) && document.getElementById(postID) !== null) { // Don't process post if filter has purged it
+    $newPost = $('#' + postID);
+    if (settings.UserSettings.inlineImages.value) {
+        $newPost.find('img').each(function (i, image) {
+            var $image = $(image);
+            $image.addClass('smallImage');
+            $image.removeAttr('width height');
+        });
+        if (settings.UserSettings.inlineImages.suboptions.delayedLoad.value || document.URL.includes("b4k")) {
+            delayedLoad($newPost);
+        } else {
+            inlineImages($newPost);
+        }
+    } // Inline images
+    if (Page.is('board') && settings.UserSettings.labelYourPosts.value) {
+        if (yourPostsLookup[board][postID]) {
+            $newPost.find('.post_author').after('<span> (You)</span>');
+        }
+    } // Handle (You) designation for expanding threads on board view
+    if (settings.UserSettings.inlineReplies.value) {
+        $newPost.addClass("base");
+    } // Prep inline responses
+    if (settings.UserSettings.embedImages.value) {
+        embedImages($newPost);
+    } // Embed images
+    if (settings.UserSettings.inlineImages.value && !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+        pauseGifs($newPost.find('img'));
+    } // Stop gifs autoplaying
+    if (settings.UserSettings.relativeTimestamps.value) {
+        relativeTimestamps($newPost);
+    } // Add relative timestamps
+    if (Page.is('board') && settings.UserSettings.filter.value) {
+        filter($newPost);
+    } // Apply filter
+    if (settings.UserSettings.postQuote.value) {
+        $newPost.find('.post_data > [data-function=quote]').removeAttr('data-function').addClass('postQuote');
+    } // Change the quote function
+    if (settings.UserSettings.hidePosts.value) {
+        $newPost.children('.pull-left').removeClass('stub');
+        if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) {
+            $newPost.find('.post_backlink').attr('id', 'p_b' + postID);
+            if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.suboptions.hideNewPosts.value) {
+                var checkedBacklinks = {};
+                $newPost.find('.text .backlink').each(function (i, backlink) {
+                    if (!checkedBacklinks[backlink.dataset.board + backlink.dataset.post]) { // Prevent reprocessing duplicate links
+                        checkedBacklinks[backlink.dataset.board + backlink.dataset.post] = true;
+                        var backlinkPost = $('#' + backlink.dataset.post);
+                        if (backlink.dataset.board === board && backlinkPost.length) { // If linked post is present in thread
+                            if (!backlinkPost.is(':visible')) { // Linked post isn't visible
+                                togglePost(postID, 'hide');
                                 return false;
                             }
-                        });
-                        if (ifMet) {
-                            $(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list [key=' + suboption + ']').closest('div:not(.settingFlexContainer)').show();
-                        } else {
-                            $(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list [key=' + suboption + ']').closest('div:not(.settingFlexContainer)').hide();
-                        }
-                        $(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > .last').removeClass('last');
-                        $(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > :visible:last').addClass('last');
-                        if ($(e.target).closest('div:not(.settingFlexContainer)').find('.suboption-list > :visible').length > 1) {
-                            $(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').show();
-                        } else {
-                            $(e.target).closest('.settingFlexContainer').children('.settingsJoinLine').hide();
-                        }
-                    }
-                }
-            } else {
-                settingPath.value = value;
-            }
-            if (elementPath.substr(0, 6) === "mascot") { // Live update changes in mascot settings
-                if (e.target.name === "Mascot image" || e.target.name === "Mascot") {
-                    mascot(parseMascotImageValue());
-                } else {
-                    mascot('');
-                }
-            } else if (elementPath.substr(0, 8) === "postFlow") {
-                postFlow();
-            } else if (elementPath.substr(0, 14) === "adjustReplybox") {
-                adjustReplybox();
-            } else if (elementPath.substr(0, 11) === "postCounter") {
-                postCounter();
-            } else if (elementPath.substr(0, 9) === "headerBar") {
-                headerBar();
-            } else if (elementPath === "revealSpoilers") {
-                revealSpoilers();
-            }
-        }
-        if (e.target.name === "Custom Favicons" || (e.target.name === "Favicon" && e.target.checked)) {
-            generateFavicons();
-        }
-        saveSettings(); // Save the settings
-        updateExportLink(); // Recreate the export link
-    });
-    if (settings.UserSettings.postCounter.suboptions.countUnloaded.value) {
-        if (Page.is('thread')) { // Count the posts that aren't loaded (eg. in last/50 mode)
-            $.ajax({
-                url: "/_/api/chan/thread/",
-                method: "GET",
-                data: { "board": board, "num": threadID, "inThread": true }
-            }).done(function (response) {
-                var firstLoadedPostID = $('article.post').length ? $('article.post')[0].id : null;
-                if (response[threadID].posts) {
-                    var postList = Object.keys(response[threadID].posts);
-                    if (postList) {
-                        for (var i = 0, len = postList.length; i < len; i++) {
-                            if (postList[i] !== firstLoadedPostID) {
-                                notLoadedPostCount++;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                }
-                postCounter();
-            });
-        }
-    }
-    if (Page.is('thread')) {
-        windowFocus = document.hasFocus();
-        $(window).focus(function () {
-            windowFocus = true;
-            ThreadUpdate();
-        });
-        $(window).blur(function () {
-            windowFocus = false;
-        });
-        $('#' + unseenPosts[0]).addClass('unseenPost'); // Add the unseen class to the first of the unseen posts
-    }
-    if (settings.UserSettings.labelYourPosts.value) {
-        for (var boardVal in yourPosts) {
-            if (yourPosts.hasOwnProperty(boardVal)) {
-                yourPostsLookup[boardVal] = {};
-                for (var thread in yourPosts[boardVal]) {
-                    if (yourPosts[boardVal].hasOwnProperty(thread)) {
-                        var threadLength = yourPosts[boardVal][thread].length;
-                        var threadArray = yourPosts[boardVal][thread];
-                        for (var i = 0; i < threadLength; i++) {
-                            yourPostsLookup[boardVal][threadArray[i]] = true;
-                        }
-                    }
-                }
-            }
-        }
-        if (Page.is('thread')) {
-            postSubmitEvent();
-        }
-    }
-
-    if (!Page.is('search,other,statistics')) {
-        var $newPost, postID, response;
-        $(document).ajaxComplete(function (event, request, ajaxSettings) {
-            if (!/inThread=true/i.test(ajaxSettings.url) && /api\/chan\/thread\/\?/i.test(ajaxSettings.url) || ((ajaxSettings.type === 'POST') && /\/submit\//i.test(ajaxSettings.url))) {
-                console.log(ajaxSettings.url);
-                console.log(request.responseText);
-                if (request.responseText !== '') {
-                    try {
-                        if (request.responseText.charAt(0) === '<') {
-                            console.log('The following is the request responseText:');
-                            console.log(request.responseText);
-                            response = {
-                                "error": "SpookyX encountered an error when parsing the response. The connection" +
-                                    " probably timed out. Feel free to give Fiddlekins the console log to have a look at."
-                            };
-                        } else {
-                            response = JSON.parse(request.responseText);
-                        }
-                    } catch (e) {
-                        response = { "error": "SpookyX encountered an error when parsing the response." };
-                        console.log('The following is the request responseText:');
-                        console.log(request.responseText);
-                        alert('A nasty error has occurred. Please take a screenshot of your console and give it to ' +
-                            'Fiddlekins to deal with.\n\n(You can typically access the console by pressing ctrl+shift+J ' +
-                            'or pressing F12 and navigating to the console tab.)');
-                    }
-                } else {
-                    response = { "error": "No responseText" };
-                }
-                if (Page.is('thread')) {
-                    if (ajaxSettings.type === 'POST') {
-                        if (response.error === undefined) {
-                            if (response.captcha) { // If you are required to fill a captcha before posting
-                                //console.log(response);
-                            } else {
-                                for (postID in response[threadID].posts) {
-                                    if (response[threadID].posts.hasOwnProperty(postID) && response[threadID].posts[postID].comment.replace(/[\r\n]/g, '') == lastSubmittedContent.replace(/[\r\n]/g, '')) {
-                                        yourPosts[board][threadID].push(postID);
-                                        $newPost = $('#' + postID);
-                                        $newPost.find('.post_author').after('<span> (You)</span>');
-                                        if (settings.UserSettings.filter.value) {
-                                            filter($newPost);
-                                        } // Apply filter
-                                    }
-                                }
-                                crosslinkTracker = JSON.parse(localStorage.crosslinkTracker);
-                                for (var boardVal in crosslinkTracker) {
-                                    if (crosslinkTracker.hasOwnProperty(boardVal)) {
-                                        for (var threadVal in crosslinkTracker[boardVal]) {
-                                            if (crosslinkTracker[boardVal].hasOwnProperty(threadVal)) {
-                                                crosslinkTracker[boardVal][threadVal][board] = true;
-                                            }
-                                        }
-                                    }
-                                }
-                                localStorage.crosslinkTracker = JSON.stringify(crosslinkTracker);
-                                saveYourPosts();
-
-                                labelNewPosts(Object.keys(response[threadID].posts), false);
-                                addFileSelect(); // Refresh the added file upload
-                            }
-                        } else {
-                            if (settings.UserSettings.notifications.value) {
-                                notifyMe("An error occurred whilst posting", faviconNotification, response.error, false);
-                            }
-                        }
-                        $('#middleReplySubmit').val('Submit').removeAttr('disabled'); // Reset submit button
-                    } else {
-                        if (response.error !== undefined) {
-                            //console.log(response.error);
-                        } else {
-                            if (response[threadID] !== undefined) {
-                                for (postID in response[threadID].posts) {
-                                    if (settings.UserSettings.filter.value) {
-                                        filter($('#' + postID));
-                                    } // Apply filter
-                                }
-                                labelNewPosts(Object.keys(response[threadID].posts), false);
-                                addFileSelect(); // Refresh the added file upload
-                            } else {
-                                //console.log("Not in a thread");
-                            }
-                        }
-                    }
-                }
-
-                for (var key in response) {
-                    if (response.hasOwnProperty(key) && response[key] !== null && response[key].posts !== undefined) {
-                        if (Page.is('board') && settings.UserSettings.labelYourPosts.value) { // Handle (You) deignation for expanding threads on board view
-                            labelNewPosts(Object.keys(response[key].posts), true);
-                        }
-                        for (postID in response[key].posts) {
-                            if (response[key].posts.hasOwnProperty(postID) && document.getElementById(postID) !== null) { // Don't process post if filter has purged it
-                                $newPost = $('#' + postID);
-                                if (settings.UserSettings.inlineImages.value) {
-                                    $newPost.find('img').each(function (i, image) {
-                                        var $image = $(image);
-                                        $image.addClass('smallImage');
-                                        $image.removeAttr('width height');
-                                    });
-                                    if (settings.UserSettings.inlineImages.suboptions.delayedLoad.value || document.URL.includes("b4k")) {
-                                        delayedLoad($newPost);
-                                    } else {
-                                        inlineImages($newPost);
-                                    }
-                                } // Inline images
-                                if (Page.is('board') && settings.UserSettings.labelYourPosts.value) {
-                                    if (yourPostsLookup[board][postID]) {
-                                        $newPost.find('.post_author').after('<span> (You)</span>');
-                                    }
-                                } // Handle (You) designation for expanding threads on board view
-                                if (settings.UserSettings.inlineReplies.value) {
-                                    $newPost.addClass("base");
-                                } // Prep inline responses
-                                if (settings.UserSettings.embedImages.value) {
-                                    embedImages($newPost);
-                                } // Embed images
-                                if (settings.UserSettings.inlineImages.value && !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-                                    pauseGifs($newPost.find('img'));
-                                } // Stop gifs autoplaying
-                                if (settings.UserSettings.relativeTimestamps.value) {
-                                    relativeTimestamps($newPost);
-                                } // Add relative timestamps
-                                if (Page.is('board') && settings.UserSettings.filter.value) {
-                                    filter($newPost);
-                                } // Apply filter
-                                if (settings.UserSettings.postQuote.value) {
-                                    $newPost.find('.post_data > [data-function=quote]').removeAttr('data-function').addClass('postQuote');
-                                } // Change the quote function
-                                if (settings.UserSettings.hidePosts.value) {
-                                    $newPost.children('.pull-left').removeClass('stub');
-                                    if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) {
-                                        $newPost.find('.post_backlink').attr('id', 'p_b' + postID);
-                                        if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.suboptions.hideNewPosts.value) {
-                                            var checkedBacklinks = {};
-                                            $newPost.find('.text .backlink').each(function (i, backlink) {
-                                                if (!checkedBacklinks[backlink.dataset.board + backlink.dataset.post]) { // Prevent reprocessing duplicate links
-                                                    checkedBacklinks[backlink.dataset.board + backlink.dataset.post] = true;
-                                                    var backlinkPost = $('#' + backlink.dataset.post);
-                                                    if (backlink.dataset.board === board && backlinkPost.length) { // If linked post is present in thread
-                                                        if (!backlinkPost.is(':visible')) { // Linked post isn't visible
-                                                            togglePost(postID, 'hide');
-                                                            return false;
-                                                        }
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    }
-                                } // Show hide post buttons
-                                if (settings.UserSettings.postCounter.value) {
-                                    postCounter();
-                                } // Update post counter
-                                if (settings.UserSettings.removeJfont.value) {
-                                    $newPost.find('.text').removeClass('shift-jis');
-                                } // Remove japanese font formatting
-                                if (settings.UserSettings.labelDeletions.value) {
-                                    $newPost.find('.icon-trash').html(' [Deleted]');
-                                } // Label deletions
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    var staticPosts = $('article.post');
-    var onlyOP = $('article.thread[data-thread-num]:not(.backlink_container)');
-    var staticPostsAndOP = staticPosts.add(onlyOP); // Save querying the staticPosts twice by extending the first query with the OP
-    addFileSelect(); // Intialise ghosting image posting
-    revealSpoilers();
-    if (settings.UserSettings.headerBar.value) {
-        headerBar();
-    } // Customise headerbar behaviour
-    mascot(parseMascotImageValue()); // Insert mascot
-    if (settings.UserSettings.adjustReplybox.value) {
-        adjustReplybox();
-    } // Adjust reply box
-    if (settings.UserSettings.inlineImages.value) { // Inline images
-        $('.toggle-expansion').remove(); // Remove the native inline expansion button
-        if (localStorage.expandpref === "yes") {
-            localStorage.expandpref = "no";
-        } // Disable native inline image expansion (might require a reload after to work?)
-        if (!Page.is('statistics')) { // Stop this interfering with the images it displays
-            $('#main img').each(function (i, image) {
-                var $image = $(image);
-                $image.addClass('smallImage');
-                if (Page.is('search,quests')) {
-                    if ($image.attr('width') >= 249 || $image.attr('height') >= 249) { // Assuming OP images are 250px limited across all archives might be false
-                        $image.addClass('thread_image');
-                    }
-                }
-                $image.removeAttr('width height');
-            });
-        }
-        if (settings.UserSettings.inlineImages.suboptions.delayedLoad.value || document.URL.includes("b4k")) {
-            delayedLoad(staticPostsAndOP);
-        } else {
-            inlineImages(staticPostsAndOP);
-        }
-    }
-    if (settings.UserSettings.removeJfont.value) {
-        $('.shift-jis').removeClass('shift-jis');
-    } // Remove japanese font formatting
-    if (settings.UserSettings.inlineReplies.value) { // Inline replies
-        staticPostsAndOP.each(function (i, post) {
-            $(post).addClass("base");
-        });
-    }
-    if (settings.UserSettings.labelYourPosts.value) { // Label your posts
-        if (Page.is('search,board,quests,gallery')) {
-            if (board === "_") { // Handle finding the board per post for all-board searches
-                $('article.post').each(function (i, post) {
-                    var postBoard = $(post).find('.post_show_board').html().replace(/\//g, '');
-                    if (yourPostsLookup[postBoard] !== undefined) {
-                        if (yourPostsLookup[postBoard][post.id]) {
-                            $(post).find('.post_author').after('<span> (You)</span>');
                         }
                     }
                 });
-            } else { // Handle the lack of threadID for board indexes and single-board searches
-                if (yourPostsLookup[board] !== undefined) {
-                    $('article.post, article.thread').each(function (i, post) {
-                        if (yourPostsLookup[board][post.id]) {
-                            $(post).find('.post_author').after('<span> (You)</span>');
-                        }
-                    });
-                }
             }
-        } else { // Handle regular threads by iterating over the yourPosts values for that specific thread (better performance than per each post parsing)
-            $.each(yourPosts[board][threadID], function (i, v) { // Parse all backlinks present on pageload
-                $('#' + v).find('.post_author').after('<span> (You)</span>');
-            });
         }
-        $('.backlink').each(function (i, backlink) {
-            if (yourPostsLookup[backlink.dataset.board] !== undefined && yourPostsLookup[backlink.dataset.board][backlink.dataset.post.replace(',', '_')]) {
-                backlink.textContent += ' (You)';
-            }
-        });
-    }
-    if (settings.UserSettings.embedImages.value) {
-        embedImages(staticPostsAndOP);
-    } // Embed images
-    if (settings.UserSettings.inlineImages.value && !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-        pauseGifs($('img'));
-    } // Stop gifs autoplaying
-    if (!Page.is('other') && settings.UserSettings.relativeTimestamps.value) {
-        relativeTimestamps(staticPostsAndOP);
-        linkHoverEvent();
-    } // Initiate relative timestamps
-    if (Page.is('thread') && settings.UserSettings.postQuote.value) {
-        $('.post_data > [data-function=quote]').each(function () {
-            $(this).removeAttr('data-function'); // Disable native quote function
-            $(this).addClass('postQuote'); // Make it findable so that inline posts will be handled
-        });
-    }
-    if (settings.UserSettings.hidePosts.value) {
-        $('.pull-left.stub').removeClass('stub'); // Show hide post buttons
-        if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) {
-            $('article.post').each(function (i, val) {
-                $(val).find('.post_backlink').attr('id', 'p_b' + val.id);
-            });
-            $('article.post').filter(':hidden').each(function (i, post) { // Recursively hide pre-hidden posts
-                recursiveToggle(post.id, "hide");
-            });
-        }
-    }
-    if (settings.UserSettings.adjustReplybox.suboptions.hideQROptions.value) {
-        $('#reply').toggleClass("showQROptions"); // Make options hidden in QR by default
-    }
+    } // Show hide post buttons
     if (settings.UserSettings.postCounter.value) {
         postCounter();
     } // Update post counter
-    if (settings.UserSettings.filter.value) {
-        filter(staticPostsAndOP);
-    } // Filter posts
+    if (settings.UserSettings.removeJfont.value) {
+        $newPost.find('.text').removeClass('shift-jis');
+    } // Remove japanese font formatting
     if (settings.UserSettings.labelDeletions.value) {
-        $('.icon-trash').html(' [Deleted]');
+        $newPost.find('.icon-trash').html(' [Deleted]');
     } // Label deletions
+}
+}
+}
+}
+}
+});
+}
 
-    $('#main').on('click', function (e) { // Detect clicks on page content
-        clickHandler(e)
-    })
-    function clickHandler(e, called = false) {
-      if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
-        if (!e.originalEvent?.ctrlKey && e.which == 1) {
-            e.preventDefault();
-            var etarget = e.target;
-            var $etarget = $(etarget);
-            var postID = etarget.dataset.post.replace(',', '_');
-            var rootPostID = $etarget.closest('article.base').attr('id');
-            var op = getOp()
-            let article = etarget.closest('article.post')
-            let auto = etarget.getAttribute('auto') ?? '0'
-            let clicked = etarget.getAttribute('clicked') ?? '0'
-            let closestPost = etarget.closest('article')
+var staticPosts = $('article.post');
+var onlyOP = $('article.thread[data-thread-num]:not(.backlink_container)');
+var staticPostsAndOP = staticPosts.add(onlyOP); // Save querying the staticPosts twice by extending the first query with the OP
+addFileSelect(); // Intialise ghosting image posting
+revealSpoilers();
+if (settings.UserSettings.headerBar.value) {
+headerBar();
+} // Customise headerbar behaviour
+mascot(parseMascotImageValue()); // Insert mascot
+if (settings.UserSettings.adjustReplybox.value) {
+adjustReplybox();
+} // Adjust reply box
+if (settings.UserSettings.inlineImages.value) { // Inline images
+$('.toggle-expansion').remove(); // Remove the native inline expansion button
+if (localStorage.expandpref === "yes") {
+localStorage.expandpref = "no";
+} // Disable native inline image expansion (might require a reload after to work?)
+if (!Page.is('statistics')) { // Stop this interfering with the images it displays
+$('#main img').each(function (i, image) {
+var $image = $(image);
+$image.addClass('smallImage');
+if (Page.is('search,quests')) {
+if ($image.attr('width') >= 249 || $image.attr('height') >= 249) { // Assuming OP images are 250px limited across all archives might be false
+$image.addClass('thread_image');
+}
+}
+$image.removeAttr('width height');
+});
+}
+if (settings.UserSettings.inlineImages.suboptions.delayedLoad.value || document.URL.includes("b4k")) {
+delayedLoad(staticPostsAndOP);
+} else {
+inlineImages(staticPostsAndOP);
+}
+}
+if (settings.UserSettings.removeJfont.value) {
+$('.shift-jis').removeClass('shift-jis');
+} // Remove japanese font formatting
+if (settings.UserSettings.inlineReplies.value) { // Inline replies
+staticPostsAndOP.each(function (i, post) {
+$(post).addClass("base");
+});
+}
+if (settings.UserSettings.labelYourPosts.value) { // Label your posts
+if (Page.is('search,board,quests,gallery')) {
+if (board === "_") { // Handle finding the board per post for all-board searches
+$('article.post').each(function (i, post) {
+var postBoard = $(post).find('.post_show_board').html().replace(/\//g, '');
+if (yourPostsLookup[postBoard] !== undefined) {
+if (yourPostsLookup[postBoard][post.id]) {
+$(post).find('.post_author').after('<span> (You)</span>');
+}
+}
+});
+} else { // Handle the lack of threadID for board indexes and single-board searches
+if (yourPostsLookup[board] !== undefined) {
+$('article.post, article.thread').each(function (i, post) {
+if (yourPostsLookup[board][post.id]) {
+$(post).find('.post_author').after('<span> (You)</span>');
+}
+});
+}
+}
+} else { // Handle regular threads by iterating over the yourPosts values for that specific thread (better performance than per each post parsing)
+$.each(yourPosts[board][threadID], function (i, v) { // Parse all backlinks present on pageload
+$('#' + v).find('.post_author').after('<span> (You)</span>');
+});
+}
+$('.backlink').each(function (i, backlink) {
+if (yourPostsLookup[backlink.dataset.board] !== undefined && yourPostsLookup[backlink.dataset.board][backlink.dataset.post.replace(',', '_')]) {
+backlink.textContent += ' (You)';
+}
+});
+}
+if (settings.UserSettings.embedImages.value) {
+embedImages(staticPostsAndOP);
+} // Embed images
+if (settings.UserSettings.inlineImages.value && !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+pauseGifs($('img'));
+} // Stop gifs autoplaying
+if (!Page.is('other') && settings.UserSettings.relativeTimestamps.value) {
+relativeTimestamps(staticPostsAndOP);
+linkHoverEvent();
+} // Initiate relative timestamps
+if (Page.is('thread') && settings.UserSettings.postQuote.value) {
+$('.post_data > [data-function=quote]').each(function () {
+$(this).removeAttr('data-function'); // Disable native quote function
+$(this).addClass('postQuote'); // Make it findable so that inline posts will be handled
+});
+}
+if (settings.UserSettings.hidePosts.value) {
+$('.pull-left.stub').removeClass('stub'); // Show hide post buttons
+if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) {
+$('article.post').each(function (i, val) {
+$(val).find('.post_backlink').attr('id', 'p_b' + val.id);
+});
+$('article.post').filter(':hidden').each(function (i, post) { // Recursively hide pre-hidden posts
+recursiveToggle(post.id, "hide");
+});
+}
+}
+if (settings.UserSettings.adjustReplybox.suboptions.hideQROptions.value) {
+$('#reply').toggleClass("showQROptions"); // Make options hidden in QR by default
+}
+if (settings.UserSettings.postCounter.value) {
+postCounter();
+} // Update post counter
+if (settings.UserSettings.filter.value) {
+filter(staticPostsAndOP);
+} // Filter posts
+if (settings.UserSettings.labelDeletions.value) {
+$('.icon-trash').html(' [Deleted]');
+} // Label deletions
 
-            let ret = false
-            const currentColor = $etarget.css("color");
-            let adjustments = { red: 0, green: 0, blue: 0 };
+$('#main').on('click', function (e) { // Detect clicks on page content
+clickHandler(e)
+})
+function clickHandler(e, called = false) {
+if (settings.UserSettings.inlineReplies.value && $(e.target).hasClass("backlink")) {
+if (!e.originalEvent?.ctrlKey && e.which == 1) {
+e.preventDefault();
+var etarget = e.target;
+var $etarget = $(etarget);
+var postID = etarget.dataset.post.replace(',', '_');
+var rootPostID = $etarget.closest('article.base').attr('id');
+var op = getOp()
+let article = etarget.closest('article.post')
+let auto = etarget.getAttribute('auto') ?? '0'
+let clicked = etarget.getAttribute('clicked') ?? '0'
+let closestPost = etarget.closest('article')
 
-            if (linksClicked.includes(postID) || postID == article?.id) {
-                adjustments.red = 127;
-                ret = true
-            } else if (!called && !$etarget.hasClass('inline')) {
-                adjustments.red = 64;
-                adjustments.blue = -64;
-            } else {
-                adjustments.green = 89;
-            }
+let ret = false
+const currentColor = $etarget.css("color");
+let adjustments = { red: 0, green: 0, blue: 0 };
 
-            let isTop = postID == article?.id
-            let isOp = postID == op[0]
-            let isFocused = focused.id == closestPost.id
-            if (called && isFocused) {
-                adjustments.red = 44
-            }
-            if (isTop || (isOp && called && isFocused)) {
-                adjustments.blue = -50
-                ret = true
-            }
+if (linksClicked.includes(postID) || postID == article?.id) {
+adjustments.red = 127;
+ret = true
+} else if (!called && !$etarget.hasClass('inline')) {
+adjustments.red = 64;
+adjustments.blue = -64;
+} else {
+adjustments.green = 89;
+}
 
-            $etarget.css("color", adjustColor(currentColor, adjustments));
-            if (ret) return
+let isTop = postID == article?.id
+let isOp = postID == op[0]
+let isFocused = focused.id == closestPost.id
+if (called && isFocused) {
+adjustments.red = 44
+}
+if (isTop || (isOp && called && isFocused)) {
+adjustments.blue = -50
+ret = true
+}
 
-            if (isOp) {
-                if (clicked == '0') {
-                    etarget.setAttribute('clicked', '1')
-                    let cloned = etarget.closest('.thread').cloneNode(true)
-                    try {
-                        cloned.querySelector('aside').remove()
-                        cloned.querySelector('#reply').remove()
-                        cloned.querySelector('.thread_tools_bottom').remove()
-                        cloned.querySelector('.js_hook_realtimethread').remove()
-                    } catch { }
-                    cloned.style.border = '2px solid #773311'
-                    etarget.parentNode.append(cloned)
-                    return
-                } else {
-                    etarget.parentNode.querySelector('article').remove()
-                    etarget.setAttribute('clicked', '0')
-                    return
-                }
-            }
+$etarget.css("color", adjustColor(currentColor, adjustments));
+if (ret) return
 
-            if (etarget.parentNode.className == "post_backlink") {
-                if ($etarget.hasClass("inlined")) {
-                    $etarget.removeClass("inlined");
-                    $('.sub' + rootPostID).each(function (index, currentPost) {
-                        $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
-                    });
-                    $('#i' + postID + '.sub' + rootPostID).remove();
-                } else {
-                    $etarget.addClass("inlined");
-                    let add = etarget.parentNode.parentNode
-                    if (called) {
-                        add = add.closest('.post_wrapper').querySelector('.text')
-                        var $div = $('<div class="empty-div"></div>');
-                        $(add).after($div)
-                        add = $div.get(0)
-                    }
-                    $(add).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
-                    $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
-                    $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
-                        if (!$(currentPost).hasClass('sub' + rootPostID)) {
-                            $(currentPost).attr("class", "inline sub" + rootPostID);
-                        }
-                    });
-                    $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
-                    if (settings.UserSettings.inlineImages.value) {
-                        inlineImages($('#r' + postID));
-                    }
-                    addHover($('#i' + postID));
-                }
-            } else {
-                if ($etarget.hasClass("inlined")) {
-                    $etarget.removeClass("inlined");
-                    $('.sub' + rootPostID).each(function (index, currentPost) {
-                        $("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
-                    });
-                    $('#i' + postID + '.sub' + rootPostID).remove();
-                } else {
-                    $etarget.addClass("inlined");
-                    $(etarget.parentNode).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
-                    $("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
-                    $("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
-                        if (!$(currentPost).hasClass('sub' + rootPostID)) {
-                            $(currentPost).attr("class", "inline sub" + rootPostID);
-                        }
-                    });
-                    $("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
-                    if (settings.UserSettings.inlineImages.value) {
-                        inlineImages($('#r' + postID));
-                    }
-                    addHover($('#i' + postID));
-                }
-            }
+if (isOp) {
+if (clicked == '0') {
+etarget.setAttribute('clicked', '1')
+let cloned = etarget.closest('.thread').cloneNode(true)
+try {
+cloned.querySelector('aside').remove()
+cloned.querySelector('#reply').remove()
+cloned.querySelector('.thread_tools_bottom').remove()
+cloned.querySelector('.js_hook_realtimethread').remove()
+} catch { }
+cloned.style.border = '2px solid #773311'
+etarget.parentNode.append(cloned)
+return
+} else {
+etarget.parentNode.querySelector('article').remove()
+etarget.setAttribute('clicked', '0')
+return
+}
+}
 
-            // NEW: Process inlined posts for more backlinks
-            if (search && !$etarget.hasClass("inlined")) {
-                setTimeout(() => {
-                    const inlinedPost = document.getElementById('r' + postID);
-                    if (inlinedPost) {
-                        processPost(inlinedPost);
-                    }
-                }, 200);
-            }
-        }
-    }  else if (settings.UserSettings.postQuote.value && e.target.className === "postQuote") { // Better post quoting
-            if (!e.originalEvent.ctrlKey && e.which == 1) {
-                e.preventDefault();
-                var postnum = e.target.innerHTML;
-                var input = document.getElementById('reply_chennodiscursus');
+if (etarget.parentNode.className == "post_backlink") {
+if ($etarget.hasClass("inlined")) {
+$etarget.removeClass("inlined");
+$('.sub' + rootPostID).each(function (index, currentPost) {
+$("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
+});
+$('#i' + postID + '.sub' + rootPostID).remove();
+} else {
+$etarget.addClass("inlined");
+let add = etarget.parentNode.parentNode
+if (called) {
+add = add.closest('.post_wrapper').querySelector('.text')
+var $div = $('<div class="empty-div"></div>');
+$(add).after($div)
+add = $div.get(0)
+}
+$(add).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
+$("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
+$("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
+if (!$(currentPost).hasClass('sub' + rootPostID)) {
+$(currentPost).attr("class", "inline sub" + rootPostID);
+}
+});
+$("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
+if (settings.UserSettings.inlineImages.value) {
+inlineImages($('#r' + postID));
+}
+addHover($('#i' + postID));
+}
+} else {
+if ($etarget.hasClass("inlined")) {
+$etarget.removeClass("inlined");
+$('.sub' + rootPostID).each(function (index, currentPost) {
+$("#" + currentPost.id.substr(1) + ".forwarded").removeClass("forwarded");
+});
+$('#i' + postID + '.sub' + rootPostID).remove();
+} else {
+$etarget.addClass("inlined");
+$(etarget.parentNode).after('<div class="inline sub' + rootPostID + '" id="i' + postID + '"></div>');
+$("#" + postID).addClass("forwarded").clone().removeClass("forwarded base post").attr("id", "r" + postID).show().appendTo($("#i" + postID + '.sub' + rootPostID));
+$("#" + rootPostID + '.base .inline').each(function (index, currentPost) {
+if (!$(currentPost).hasClass('sub' + rootPostID)) {
+$(currentPost).attr("class", "inline sub" + rootPostID);
+}
+});
+$("#i" + postID + " .post_wrapper").addClass("post_wrapperInline");
+if (settings.UserSettings.inlineImages.value) {
+inlineImages($('#r' + postID));
+}
+addHover($('#i' + postID));
+}
+}
 
-                if (input.selectionStart !== undefined) {
-                    var startPos = input.selectionStart;
-                    //var endPos = input.selectionEnd;
-                    var startText = input.value.substring(0, startPos);
-                    var endText = input.value.substring(startPos);
+// NEW: Process inlined posts for more backlinks
+if (search && !$etarget.hasClass("inlined")) {
+setTimeout(() => {
+const inlinedPost = document.getElementById('r' + postID);
+if (inlinedPost) {
+processPost(inlinedPost);
+}
+}, 200);
+}
+}
+}  else if (settings.UserSettings.postQuote.value && e.target.className === "postQuote") { // Better post quoting
+if (!e.originalEvent.ctrlKey && e.which == 1) {
+e.preventDefault();
+var postnum = e.target.innerHTML;
+var input = document.getElementById('reply_chennodiscursus');
 
-                    var originalText = input.value;
-                    var selectedText = getSelectionText();
-                    var newText;
-                    if (selectedText === "") {
-                        newText = startText + ">>" + postnum + "\n" + endText;
-                    } else {
-                        newText = startText + ">>" + postnum + "\n>" + selectedText + "\n" + endText;
-                    }
-                    document.getElementById('reply_chennodiscursus').value = originalText.replace(originalText, newText);
-                }
-            }
-        } else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "IMG") { // Expand images
-            if (!e.originalEvent.ctrlKey && e.which == 1) {
-                e.preventDefault();
-                var image = $(e.target);
-                image.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
-                if (image.attr('gif')) {
-                    var canvas = image.next('canvas');
-                    canvas.toggle();
-                    image.toggle();
-                } else {
-                    image.toggleClass("smallImage bigImage");
-                    $('#hoverUI').html('');
-                    image.trigger("mouseenter");
-                }
-            }
-        } else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "CANVAS") { // Expand images
-            if (!e.originalEvent.ctrlKey && e.which == 1) {
-                e.preventDefault();
-                var canvas = $(e.target);
-                var image = canvas.prev('img');
-                canvas.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
-                canvas.toggle();
-                image.toggle();
-                $('#hoverUI').html('');
-                image.trigger("mouseenter");
-            }
-        } else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "VIDEO") { // Expand videos
-            var video = e.target;
-            var $video = $(video);
-            $video.toggleClass('bigImage'); // Make it full opacity to override spoilering
-            $video.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
-            if ($video.hasClass('fullVideo')) {
-                if (!settings.UserSettings.inlineImages.suboptions.inlineVideos.suboptions.firefoxCompatibility.value ||
-                    e.pageY < (video.offsetTop + video.videoHeight - 28)) { // Firefox blows. FF controls are 28px tall at this point
-                    video.pause();
-                    video.muted = true;
-                    $video.attr('width', ($video.closest('article').hasClass('thread') ? imageWidthOP : imageWidth));
-                    $video.removeAttr('controls');
-                    $video.removeClass("fullVideo");
-                    window.setTimeout(function () { // Firefox can suck my dick
-                        video.pause();
-                    }, 0);
-                }
-            } else {
-                $video.removeAttr('width');
-                $video.attr('controls', '');
-                $video.addClass("fullVideo");
-                video.muted = false;
-                video.play();
-            }
-            $('#hoverUI').html('');
-            $video.trigger("mouseenter");
-        } else if (e.target.className === "btn-toggle-post" || e.target.parentNode.className === "btn-toggle-post") { // If a hide post button is clicked
-            var button = e.target.className === "btn-toggle-post" ? e.target : e.target.parentNode;
-            if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) { // If recursive toggling is enabled
-                if (button.attributes["data-function"].value === "showPost") {
-                    recursiveToggle($('article.doc_id_' + button.attributes["data-doc-id"].value).attr('id'), "show");
-                } else if (button.attributes["data-function"].value === "hidePost") {
-                    recursiveToggle($('article.doc_id_' + button.attributes["data-doc-id"].value).attr('id'), "hide");
-                }
-            }
-            var waitForNativeHide = setInterval(function () { // Calling postCounter immediately does so before the native site toggles everything
-                if ($(button).closest('.post, .thread').css('display') === "none") {
-                    clearInterval(waitForNativeHide);
-                    postCounter(); // Update post counter
-                }
-            }, 100);
-        }
-        if(search){
-          processPost($(`#r${postID}`)[0])
-        }
-    };
+if (input.selectionStart !== undefined) {
+var startPos = input.selectionStart;
+//var endPos = input.selectionEnd;
+var startText = input.value.substring(0, startPos);
+var endText = input.value.substring(startPos);
 
-    var executeShortcut = function (shortcut) {
-        var input = document.getElementById('reply_chennodiscursus');
+var originalText = input.value;
+var selectedText = getSelectionText();
+var newText;
+if (selectedText === "") {
+newText = startText + ">>" + postnum + "\n" + endText;
+} else {
+newText = startText + ">>" + postnum + "\n>" + selectedText + "\n" + endText;
+}
+document.getElementById('reply_chennodiscursus').value = originalText.replace(originalText, newText);
+}
+}
+} else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "IMG") { // Expand images
+if (!e.originalEvent.ctrlKey && e.which == 1) {
+e.preventDefault();
+var image = $(e.target);
+image.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
+if (image.attr('gif')) {
+var canvas = image.next('canvas');
+canvas.toggle();
+image.toggle();
+} else {
+image.toggleClass("smallImage bigImage");
+$('#hoverUI').html('');
+image.trigger("mouseenter");
+}
+}
+} else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "CANVAS") { // Expand images
+if (!e.originalEvent.ctrlKey && e.which == 1) {
+e.preventDefault();
+var canvas = $(e.target);
+var image = canvas.prev('img');
+canvas.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
+canvas.toggle();
+image.toggle();
+$('#hoverUI').html('');
+image.trigger("mouseenter");
+}
+} else if (settings.UserSettings.inlineImages.value && e.target.nodeName === "VIDEO") { // Expand videos
+var video = e.target;
+var $video = $(video);
+$video.toggleClass('bigImage'); // Make it full opacity to override spoilering
+$video.closest('.thread_image_box').find('.spoilerText').toggle(); // Toggle the Spoiler text
+if ($video.hasClass('fullVideo')) {
+if (!settings.UserSettings.inlineImages.suboptions.inlineVideos.suboptions.firefoxCompatibility.value ||
+e.pageY < (video.offsetTop + video.videoHeight - 28)) { // Firefox blows. FF controls are 28px tall at this point
+video.pause();
+video.muted = true;
+$video.attr('width', ($video.closest('article').hasClass('thread') ? imageWidthOP : imageWidth));
+$video.removeAttr('controls');
+$video.removeClass("fullVideo");
+window.setTimeout(function () { // Firefox can suck my dick
+video.pause();
+}, 0);
+}
+} else {
+$video.removeAttr('width');
+$video.attr('controls', '');
+$video.addClass("fullVideo");
+video.muted = false;
+video.play();
+}
+$('#hoverUI').html('');
+$video.trigger("mouseenter");
+} else if (e.target.className === "btn-toggle-post" || e.target.parentNode.className === "btn-toggle-post") { // If a hide post button is clicked
+var button = e.target.className === "btn-toggle-post" ? e.target : e.target.parentNode;
+if (settings.UserSettings.hidePosts.suboptions.recursiveHiding.value) { // If recursive toggling is enabled
+if (button.attributes["data-function"].value === "showPost") {
+recursiveToggle($('article.doc_id_' + button.attributes["data-doc-id"].value).attr('id'), "show");
+} else if (button.attributes["data-function"].value === "hidePost") {
+recursiveToggle($('article.doc_id_' + button.attributes["data-doc-id"].value).attr('id'), "hide");
+}
+}
+var waitForNativeHide = setInterval(function () { // Calling postCounter immediately does so before the native site toggles everything
+if ($(button).closest('.post, .thread').css('display') === "none") {
+clearInterval(waitForNativeHide);
+postCounter(); // Update post counter
+}
+}, 100);
+}
+if(search){
+processPost($(`#r${postID}`)[0])
+}
+};
 
-        if (input.selectionStart !== undefined) {
-            $('#reply_chennodiscursus').selection('insert', {
-                text: "[" + shortcut + "]",
-                mode: 'before'
-            });
-            $('#reply_chennodiscursus').selection('insert', {
-                text: "[/" + shortcut + "]",
-                mode: 'after'
-            });
-        }
-    };
+var executeShortcut = function (shortcut) {
+var input = document.getElementById('reply_chennodiscursus');
 
-    function quickReply() {
-        $('#reply').toggleClass("quickReply");
-        $('#reply fieldset > div:nth-child(1)').css("width", "");
-        if ($('#reply').hasClass("showQROptions")) {
-            $('#reply .pull-left:not(.input-append)').toggle();
-        }
+if (input.selectionStart !== undefined) {
+$('#reply_chennodiscursus').selection('insert', {
+text: "[" + shortcut + "]",
+mode: 'before'
+});
+$('#reply_chennodiscursus').selection('insert', {
+text: "[/" + shortcut + "]",
+mode: 'after'
+});
+}
+};
+
+function quickReply() {
+$('#reply').toggleClass("quickReply");
+$('#reply fieldset > div:nth-child(1)').css("width", "");
+if ($('#reply').hasClass("showQROptions")) {
+$('#reply .pull-left:not(.input-append)').toggle();
+}
+}
+
+function quickReplyOptions() {
+$('#reply').toggleClass("showQROptions");
+$('#reply.quickReply .pull-left:not(.input-append)').toggle();
+}
+
+var favican = document.createElement("IMG");
+favican.src = settings.UserSettings.favicon.suboptions.customFavicons.suboptions.lit.value;
+var exclam = document.createElement("IMG");
+exclam.src = settings.UserSettings.favicon.suboptions.customFavicons.suboptions.alertOverlay.value;
+
+function canfav() {
+$('#myCanvas').toggle();
+$('#myCanvas')[0].getContext("2d").drawImage(favican, 0, 0);
+$('#myCanvas')[0].getContext("2d").drawImage(exclam, 0, 0);
+}
+var imgIndex;
+function galleryToggle() {
+console.time('gal');
+var $imageBoxes = $('.thread_image_box');
+if ($imageBoxes.length === 0 || $('#gallery').filter(':visible').length) {
+$('#gallery').hide();
+} else {
+$('#gallery').show();
+var viewportTop = window.scrollY;
+var viewportBottom = viewportTop + window.innerHeight;
+$imageBoxes.each(function (i, imageBox) {
+imgIndex = i;
+if (imageBox.offsetTop + imageBox.offsetHeight > viewportTop) {
+if (imageBox.offsetTop >= viewportBottom) {
+imgIndex = i - 1;
+}
+return false; // break loop
+}
+});
+if (imgIndex == -1) {
+imgIndex = 0;
+}
+if (!$('#gallery').length) {
+$('body').append('<div id="gallery"></div>');
+}
+galleryUpdate();
+}
+console.timeEnd('gal');
+}
+
+function galleryChange(direction) {
+if ($('#gallery').filter(':visible').length) {
+if (direction == "left") {
+if (imgIndex === 0) {
+imgIndex = $('.thread_image_box').length - 1;
+} else {
+imgIndex--;
+}
+} else if (direction == "right") {
+if (imgIndex == $('.thread_image_box').length - 1) {
+imgIndex = 0;
+} else {
+imgIndex++;
+}
+} else {
+console.log("Something went wrong boss.");
+}
+galleryUpdate();
+}
+}
+
+function galleryUpdate() {
+if ($('#gallery').length) {
+var imgList = $('.thread_image_box');
+if ($(imgList[imgIndex]).find('img').length) {
+$('#gallery').html('<img style="max-width:90%; max-height:90%;" src="' + $(imgList[imgIndex]).find('img')[0].src + '">');
+} else if ($(imgList[imgIndex]).find('video').length) {
+$('#gallery').html('<video style="float:left; max-width:90%; max-height:90%;" name="media" loop muted controls ' + autoplayVid + '><source src="' + $(imgList[imgIndex]).find('video')[0].currentSrc + '" type="video/webm"></video>');
+} else {
+console.log("Oh boy something gone wrong again!");
+console.log($(imgList[imgIndex]));
+}
+$(document).scrollTop($(imgList[imgIndex]).find('img, video').offset().top - 26);
+}
+}
+
+function populateSettingsMenu() {
+if ($('#settingsMenu').is(":visible")) {
+$('#settingsMenu').hide();
+} else {
+if (localStorage.SpookyXsettings !== undefined) {
+$.extend(true, settings, JSON.parse(localStorage.SpookyXsettings));
+}
+var settingsHTML = '<div id="Main">' + generateSubOptionHTML(settings.UserSettings, '') + '</div>';
+settingsHTML += '<div id="Filter">' + generateFilterHTML() + '</div>';
+$('#settingsContent').html(settingsHTML);
+if (!settings.UserSettings.filter.value) {
+$('#filterDisabledMessage').show(); // Show filter disabled message if the filter is disabled
+}
+$('#settingsMenu').show(); // Show the menu
+$('#settingsContent .suboption-list > :visible:last').addClass('last');
+$('#settingsContent > div').hide(); //  Hide all tabs
+$('#settingsContent #' + $('.sections-list .active').html()).show(); // Show active tab
+$('#settingsContent select, #settingsContent input').each(function (i, el) {
+if (el.type !== "checkbox") { // Add the top margins for non-checkboxes to align description with name
+$(el).parent().next().addClass('selectDescription');
+}
+if (el.nodeName === "SELECT") { // Hide the settings join line for select options that start with one or less visible suboptions
+var visibleSubopsCount = 0;
+$(el).closest('div:not(.settingFlexContainer)').children('.suboption-list').children().each(function (i, subop) {
+if ($(subop).css('display') !== "none") {
+visibleSubopsCount++;
+}
+});
+if (visibleSubopsCount <= 1) {
+$(el).closest('.settingFlexContainer').children('.settingsJoinLine').hide();
+}
+}
+});
+updateExportLink(); // Create the export link
+}
+}
+
+function generateFilterHTML() {
+var settingsHTML = '';
+var type;
+settingsHTML += '<div class="filters-list"><a href="javascript:;" class="active" name="guide">Guide</a>';
+for (type in settings.FilterSettings) {
+if (settings.FilterSettings.hasOwnProperty(type)) {
+settingsHTML += ' | <a href="javascript:;" name="' + type + '">' + settings.FilterSettings[type].name + '</a>';
+}
+}
+settingsHTML += '</div>';
+settingsHTML += '<div id="filter_guide" style="padding:4px;"><div id="filterDisabledMessage" style="color: #d14; background-color: #f7f7f9; text-align: center; font-size: 15px; display:none;">The Filter is currently disabled. Turn it on via the setting in the Main tab</div><p>Use <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions" style="text-decoration: underline;">regular expressions</a>, one per line. <br>Lines starting with a <code>#</code> will be ignored. <br>For example, <code>/weeaboo/i</code> will filter posts containing the string <code>weeaboo</code>, case-insensitive. <br><br>You can use these settings with each regular expression, separate them with semicolons: </p><ul> <li>Per boards, separate them with commas. It is global if not specified. <br>For example: <code>boards:a,tg;</code></li><li> Set the way the filter will handle the post with <code>mode</code><br>For example: <code>mode:hide;</code><br>Valid options are: <ul> <li><code>purge</code>: Remove the post from the page entirely, the site will need to reload the post for hoverlinks and such to work.</li><li><code>remove</code>: Remove the post from view but leave it in the page.</li><li><code>hide</code>: Collapse the post, leave a button to restore it.</li><li><code>fade</code>: Simply halve the opacity of the post. This is the default if the mode isn\'t specified.</li></ul> </li></ul></div>';
+for (type in settings.FilterSettings) {
+if (settings.FilterSettings.hasOwnProperty(type)) {
+settingsHTML += '<div id="filter_' + type + '" style="display: none;"><textarea name="' + type + '" spellcheck="false" class="filterTextarea">';
+$.each(settings.FilterSettings[type].value, function (i, line) {
+if (i) {
+settingsHTML += '\n';
+}
+if (!line.comment) {
+if (line.regex !== undefined && line.regex.pattern !== undefined) {
+settingsHTML += "/" + line.regex.pattern + "/" + line.regex.flag + ';';
+for (var prop in line) {
+    if (line.hasOwnProperty(prop) && prop !== "comment" && prop !== "regex") {
+        settingsHTML += prop + ':' + line[prop] + ';';
     }
+}
+}
+} else {
+settingsHTML += line.comment;
+}
+});
+settingsHTML += '</textarea></div>';
+}
+}
+return settingsHTML;
+}
 
-    function quickReplyOptions() {
-        $('#reply').toggleClass("showQROptions");
-        $('#reply.quickReply .pull-left:not(.input-append)').toggle();
+function generateSubOptionHTML(input, path) {
+var settingsHTML = '';
+$.each(input, function (key, value) {
+if (value.name !== undefined) {
+var checked = '';
+var subOpsHidden = '';
+if (value.value) {
+checked = ' checked';
+} else {
+subOpsHidden = ' style="display: none;"';
+}
+if (value.if !== undefined) {
+var parentPath = objpath(settings.UserSettings, path.substring(0, path.length - '.suboptions.'.length));
+var pattTest = new RegExp(parentPath.value.value);
+var ifMet = false;
+$.each(value.if, function (i, v) {
+if (pattTest.test(v)) {
+ifMet = true;
+return false;
+}
+});
+if (ifMet) {
+settingsHTML += '<div>';
+} else {
+settingsHTML += '<div style="display:none;">';
+}
+} else {
+settingsHTML += '<div>';
+}
+settingsHTML += '<div class="settingFlexContainer">';
+if (value.suboptions !== undefined && Object.keys(value.suboptions).length > 1) {
+settingsHTML += '<div class="settingsJoinLine';
+if (value.type === "checkbox") {
+settingsHTML += ' settingsJoinLineCheckbox';
+}
+settingsHTML += '"' + subOpsHidden + '></div>';
+}
+settingsHTML += '<label>';
+switch (value.type) {
+case "checkbox":
+settingsHTML += '<input type="checkbox" name="' + value.name + '" key="' + key + '"' + checked + ' path="' + path + key + '">';
+break;
+case "text":
+settingsHTML += '<input type="text" name="' + value.name + '" key="' + key + '" value="' + value.value + '" path="' + path + key + '">';
+break;
+case "number":
+settingsHTML += '<input type="number" name="' + value.name + '" key="' + key + '" value="' + value.value + '" path="' + path + key + '">';
+break;
+case "select":
+settingsHTML += '<select name="' + value.name + '" key="' + key + '" path="' + path + key + '">';
+$.each(value.value.options, function (i, v) {
+settingsHTML += '<option';
+if (v == value.value.value) {
+    settingsHTML += ' selected';
+}
+settingsHTML += '>' + v + '</option>';
+});
+settingsHTML += '</select>';
+break;
+}
+settingsHTML += value.name + ': </label><span class="description">' + value.description + '</span></div>';
+if (value.suboptions !== undefined) {
+settingsHTML += '<div class="suboption-list"' + subOpsHidden + '>' + generateSubOptionHTML(value.suboptions, path + key + '.suboptions.') + '</div>';
+}
+settingsHTML += '</div>';
+}
+});
+return settingsHTML;
+}
+
+function settingsStrip(input) {
+var obj = {};
+$.each(input, function (key, value) {
+obj[key] = {};
+obj[key].value = value.value;
+if (value.suboptions !== undefined) {
+obj[key].suboptions = settingsStrip(value.suboptions);
+}
+});
+return obj;
+}
+
+$(function () {
+shortcut.add("ctrl+s", function () {
+executeShortcut("spoiler");
+});
+shortcut.add("ctrl+i", function () {
+executeShortcut("i");
+});
+shortcut.add("ctrl+b", function () {
+executeShortcut("b");
+});
+shortcut.add("ctrl+u", function () {
+executeShortcut("u");
+});
+shortcut.add("q", function () {
+quickReply();
+}, { "disable_in_input": true });
+shortcut.add("ctrl+q", function () {
+quickReplyOptions();
+}, { "disable_in_input": false });
+shortcut.add("f", function () {
+if (settings.UserSettings.favicon.value) {
+canfav();
+}
+}, { "disable_in_input": true });
+shortcut.add("g", function () {
+if (settings.UserSettings.gallery.value) {
+galleryToggle();
+}
+}, { "disable_in_input": true });
+shortcut.add("left", function () {
+if (settings.UserSettings.gallery.value) {
+galleryChange("left");
+}
+}, { "disable_in_input": true });
+shortcut.add("right", function () {
+if (settings.UserSettings.gallery.value) {
+galleryChange("right");
+}
+}, { "disable_in_input": true });
+shortcut.add("o", function () {
+populateSettingsMenu();
+}, { "disable_in_input": true });
+if (Page.is('thread')) {
+seenPosts();
+ThreadUpdate();
+window.setInterval(function () {
+ThreadUpdate();
+}, 250);
+}
+})
+if (settings.UserSettings.threading.value) {
+let open = [];
+let posts = getPosts(); // Assuming getPosts() returns a jQuery object
+let pUrl = document.URL.split('/');
+let pLast = pUrl[pUrl.length - 1]
+
+// Check if the post starts with '#'
+if (pLast.charAt(0) === '#') {
+let post = `#${pLast.substring(1)}`; // Construct the ID selector
+focused = $(post)[0]
+focused.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// Function to handle clicks
+function handleClicks(aElems) {
+let queue = [...aElems]; // Start with the initial elements
+
+while (queue.length > 0) {
+let a = queue.shift(); // Remove the first element from the queue
+let i = a.dataset.post;
+
+if (i && !open.includes(i)) {
+// Simulate a click event
+const event = {
+target: a,
+originalEvent: new MouseEvent('click', {
+bubbles: true,
+cancelable: true,
+button: 0
+}),
+which: 1, // Left mouse button
+preventDefault: () => { }, // Dummy preventDefault function
+};
+clickHandler(event, true); // Call clickHandler
+
+// Refresh posts
+let postsElement = a.closest('.post');
+if (!postsElement) continue; // Skip if no posts
+
+let newSelector = inverse ? `.text > #i${i} .text .backlink` : ".post_backlink > a.backlink"
+let $newPosts = $(postsElement).find(newSelector).toArray(); // Find new links
+
+// Queue new links
+for (let newPost of $newPosts) {
+let newPostId = newPost.dataset.post;
+if (newPostId && !open.includes(newPostId)) {
+queue.push(newPost); // Add to the queue
+}
+}
+
+open.unshift(i); // Mark this post as opened
+}
+}
+}
+
+// Iterate through each post in the correct order
+if (inverse) {
+// From last post to first
+for (let index = posts.length - 1; index >= 0; index--) {
+let $p = $(posts[index]); // Convert p to a jQuery object
+let links = $p.find('.text .backlink'); // Find inlined backlinks
+handleClicks(links.toArray()); // Handle clicks on inlined links
+let mentions = $('.post_backlink > .backlink'); // Find inlined backlinks
+
+// Filter mentions to only include those that correspond to existing posts
+let validMentions = mentions.filter(function () {
+let postId = $(this).data('post'); // Get the post ID from the mention
+return $('#' + postId).hasClass('post'); // Check if the post exists
+});
+
+// Handle clicks on the valid mentions
+//validMentions.each(function () { handleClicks([this]); });
+console.log($p, $p.attr('id'), links.length, links); // Log info about the post
+}
+}
+if (!inverse) {
+// From reverse first post to last
+$.each(posts.toArray().reverse(), function (index, p) {
+let $p = $(p); // Convert p to a jQuery object
+let links = $p.find('.post_backlink > a.backlink'); // Find non-inlined backlinks
+handleClicks(links.toArray()); // Handle clicks on non-inlined links
+console.log($p, $p.attr('id'), links.length, links); // Log info about the post
+});
+}
+$.each(posts, function (index, p) {
+let $p = $(p); // Convert p to a jQuery object
+let links = $p.find('.post_controls'); // Find non-inlined backlinks
+links.each(function () {
+let $this = $(this);
+let $button = $('<button class="OP-button">OP</button>');
+$button.css({
+'height': $this.height(),
+'border-radius': '50%',
+'color': 'white',
+'background': '#220044'
+});
+$this.after($button);
+
+
+$button.click(async function () {
+console.log("OP button clicked");
+let opElem = $(getOp()[1]).clone();
+if (search) {
+console.log("Fetching OP for search result:", $this.closest('article.post')[0].id);
+opElem = await fetchOp($this.closest('article.post')[0].id);
+console.log("Fetched OP element:", opElem);
+}
+opElem.find('aside, #reply, .thread_tools_bottom, .js_hook_realtimethread').remove();
+
+// Remove duplicate backlink lists to prevent "Quoted By" duplicates
+opElem.find('.backlink_list').remove();
+
+// Set the border style
+opElem.css('border', '2px solid #773311');
+
+// Find the parent element
+let parent = $this.parent();
+let $inlineOp = parent.next('.inline-op');
+
+if (!$inlineOp.length) {
+console.log("Creating new inline-op element");
+// Create the new inline-op element
+let newInlineOp = $('<div class="inline-op"></div>')[0];
+parent.after(newInlineOp);
+
+// If opElem is a jQuery object, convert it to a DOM element
+if (opElem instanceof jQuery) {
+console.log("Appending jQuery opElem to newInlineOp");
+newInlineOp.appendChild(opElem[0]);
+
+// Process images in the cloned OP post - use a more direct selector
+setTimeout(() => {
+    console.log("Processing images in opElem");
+    // First try to process the entire inline-op element
+    let $inlineOpElement = $(newInlineOp);
+
+    // Log what we're processing
+    console.log("Processing images in:", $inlineOpElement);
+    console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
+
+    // Process images directly on the opElem first
+    inlineImages(opElem);
+
+    // Then process the entire inline-op element
+    inlineImages($inlineOpElement);
+
+    // If we need to handle gifs that should be paused
+    if (settings.UserSettings.inlineImages &&
+        settings.UserSettings.inlineImages.suboptions &&
+        settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
+        !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+        pauseGifs($inlineOpElement.find('img'));
     }
+}, 100);
+} else {
+console.log("Appending HTML string opElem to newInlineOp");
+newInlineOp.innerHTML += opElem;
 
-    var favican = document.createElement("IMG");
-    favican.src = settings.UserSettings.favicon.suboptions.customFavicons.suboptions.lit.value;
-    var exclam = document.createElement("IMG");
-    exclam.src = settings.UserSettings.favicon.suboptions.customFavicons.suboptions.alertOverlay.value;
+// Process images in the HTML string case
+setTimeout(() => {
+    console.log("Processing images in HTML string case");
+    let $inlineOpElement = $(newInlineOp);
 
-    function canfav() {
-        $('#myCanvas').toggle();
-        $('#myCanvas')[0].getContext("2d").drawImage(favican, 0, 0);
-        $('#myCanvas')[0].getContext("2d").drawImage(exclam, 0, 0);
+    // Log what we're processing
+    console.log("Processing images in:", $inlineOpElement);
+    console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
+
+    // Process all children
+    inlineImages($inlineOpElement.children());
+
+    // If we need to handle gifs that should be paused
+    if (settings.UserSettings.inlineImages &&
+        settings.UserSettings.inlineImages.suboptions &&
+        settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
+        !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
+        pauseGifs($inlineOpElement.find('img'));
     }
-    var imgIndex;
-    function galleryToggle() {
-        console.time('gal');
-        var $imageBoxes = $('.thread_image_box');
-        if ($imageBoxes.length === 0 || $('#gallery').filter(':visible').length) {
-            $('#gallery').hide();
-        } else {
-            $('#gallery').show();
-            var viewportTop = window.scrollY;
-            var viewportBottom = viewportTop + window.innerHeight;
-            $imageBoxes.each(function (i, imageBox) {
-                imgIndex = i;
-                if (imageBox.offsetTop + imageBox.offsetHeight > viewportTop) {
-                    if (imageBox.offsetTop >= viewportBottom) {
-                        imgIndex = i - 1;
-                    }
-                    return false; // break loop
-                }
-            });
-            if (imgIndex == -1) {
-                imgIndex = 0;
-            }
-            if (!$('#gallery').length) {
-                $('body').append('<div id="gallery"></div>');
-            }
-            galleryUpdate();
-        }
-        console.timeEnd('gal');
-    }
+}, 100);
+}
+} else {
+// If it exists, remove the inline-op element
+$inlineOp.remove();
+}
+});
+});
+});
+if (pLast.charAt(0) === '#') {
 
-    function galleryChange(direction) {
-        if ($('#gallery').filter(':visible').length) {
-            if (direction == "left") {
-                if (imgIndex === 0) {
-                    imgIndex = $('.thread_image_box').length - 1;
-                } else {
-                    imgIndex--;
-                }
-            } else if (direction == "right") {
-                if (imgIndex == $('.thread_image_box').length - 1) {
-                    imgIndex = 0;
-                } else {
-                    imgIndex++;
-                }
-            } else {
-                console.log("Something went wrong boss.");
-            }
-            galleryUpdate();
-        }
-    }
+let post = `#r${pLast.substring(1)}`; // Construct the ID selector
+let targetElement = $(post)[0]; // Get the DOM element
+if (targetElement) {
+const scrollToElement = () => {
+targetElement = $(post)[0]; // Get the DOM element
+targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+};
+scrollToElement()
+let is = 0
+// Start the interval to scroll the element into view every 500 milliseconds
+const intervalId = setInterval(() => {
+//const rect = targetElement.getBoundingClientRect();
+//const isInView = rect.top >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight);
 
-    function galleryUpdate() {
-        if ($('#gallery').length) {
-            var imgList = $('.thread_image_box');
-            if ($(imgList[imgIndex]).find('img').length) {
-                $('#gallery').html('<img style="max-width:90%; max-height:90%;" src="' + $(imgList[imgIndex]).find('img')[0].src + '">');
-            } else if ($(imgList[imgIndex]).find('video').length) {
-                $('#gallery').html('<video style="float:left; max-width:90%; max-height:90%;" name="media" loop muted controls ' + autoplayVid + '><source src="' + $(imgList[imgIndex]).find('video')[0].currentSrc + '" type="video/webm"></video>');
-            } else {
-                console.log("Oh boy something gone wrong again!");
-                console.log($(imgList[imgIndex]));
-            }
-            $(document).scrollTop($(imgList[imgIndex]).find('img, video').offset().top - 26);
-        }
-    }
+// If the element is not in view, scroll to it
+//if (!isInView) {
+if(is > 3){
+clearInterval(intervalId)
+return
+}
+scrollToElement();
+is+=1
+//}
+}, 200); // Adjust the interval time as needed
 
-    function populateSettingsMenu() {
-        if ($('#settingsMenu').is(":visible")) {
-            $('#settingsMenu').hide();
-        } else {
-            if (localStorage.SpookyXsettings !== undefined) {
-                $.extend(true, settings, JSON.parse(localStorage.SpookyXsettings));
-            }
-            var settingsHTML = '<div id="Main">' + generateSubOptionHTML(settings.UserSettings, '') + '</div>';
-            settingsHTML += '<div id="Filter">' + generateFilterHTML() + '</div>';
-            $('#settingsContent').html(settingsHTML);
-            if (!settings.UserSettings.filter.value) {
-                $('#filterDisabledMessage').show(); // Show filter disabled message if the filter is disabled
-            }
-            $('#settingsMenu').show(); // Show the menu
-            $('#settingsContent .suboption-list > :visible:last').addClass('last');
-            $('#settingsContent > div').hide(); //  Hide all tabs
-            $('#settingsContent #' + $('.sections-list .active').html()).show(); // Show active tab
-            $('#settingsContent select, #settingsContent input').each(function (i, el) {
-                if (el.type !== "checkbox") { // Add the top margins for non-checkboxes to align description with name
-                    $(el).parent().next().addClass('selectDescription');
-                }
-                if (el.nodeName === "SELECT") { // Hide the settings join line for select options that start with one or less visible suboptions
-                    var visibleSubopsCount = 0;
-                    $(el).closest('div:not(.settingFlexContainer)').children('.suboption-list').children().each(function (i, subop) {
-                        if ($(subop).css('display') !== "none") {
-                            visibleSubopsCount++;
-                        }
-                    });
-                    if (visibleSubopsCount <= 1) {
-                        $(el).closest('.settingFlexContainer').children('.settingsJoinLine').hide();
-                    }
-                }
-            });
-            updateExportLink(); // Create the export link
-        }
-    }
+// Function to handle wheel events
+const handleWheel = () => {
+clearInterval(intervalId);
+console.log("Scrolling stopped due to user interaction.");
+// Optionally, you can remove the event listener if you only want to stop once
+window.removeEventListener('wheel', handleWheel);
+};
 
-    function generateFilterHTML() {
-        var settingsHTML = '';
-        var type;
-        settingsHTML += '<div class="filters-list"><a href="javascript:;" class="active" name="guide">Guide</a>';
-        for (type in settings.FilterSettings) {
-            if (settings.FilterSettings.hasOwnProperty(type)) {
-                settingsHTML += ' | <a href="javascript:;" name="' + type + '">' + settings.FilterSettings[type].name + '</a>';
-            }
-        }
-        settingsHTML += '</div>';
-        settingsHTML += '<div id="filter_guide" style="padding:4px;"><div id="filterDisabledMessage" style="color: #d14; background-color: #f7f7f9; text-align: center; font-size: 15px; display:none;">The Filter is currently disabled. Turn it on via the setting in the Main tab</div><p>Use <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions" style="text-decoration: underline;">regular expressions</a>, one per line. <br>Lines starting with a <code>#</code> will be ignored. <br>For example, <code>/weeaboo/i</code> will filter posts containing the string <code>weeaboo</code>, case-insensitive. <br><br>You can use these settings with each regular expression, separate them with semicolons: </p><ul> <li>Per boards, separate them with commas. It is global if not specified. <br>For example: <code>boards:a,tg;</code></li><li> Set the way the filter will handle the post with <code>mode</code><br>For example: <code>mode:hide;</code><br>Valid options are: <ul> <li><code>purge</code>: Remove the post from the page entirely, the site will need to reload the post for hoverlinks and such to work.</li><li><code>remove</code>: Remove the post from view but leave it in the page.</li><li><code>hide</code>: Collapse the post, leave a button to restore it.</li><li><code>fade</code>: Simply halve the opacity of the post. This is the default if the mode isn\'t specified.</li></ul> </li></ul></div>';
-        for (type in settings.FilterSettings) {
-            if (settings.FilterSettings.hasOwnProperty(type)) {
-                settingsHTML += '<div id="filter_' + type + '" style="display: none;"><textarea name="' + type + '" spellcheck="false" class="filterTextarea">';
-                $.each(settings.FilterSettings[type].value, function (i, line) {
-                    if (i) {
-                        settingsHTML += '\n';
-                    }
-                    if (!line.comment) {
-                        if (line.regex !== undefined && line.regex.pattern !== undefined) {
-                            settingsHTML += "/" + line.regex.pattern + "/" + line.regex.flag + ';';
-                            for (var prop in line) {
-                                if (line.hasOwnProperty(prop) && prop !== "comment" && prop !== "regex") {
-                                    settingsHTML += prop + ':' + line[prop] + ';';
-                                }
-                            }
-                        }
-                    } else {
-                        settingsHTML += line.comment;
-                    }
-                });
-                settingsHTML += '</textarea></div>';
-            }
-        }
-        return settingsHTML;
-    }
+// Add the event listener for wheel events
+window.addEventListener('wheel', handleWheel);
+} else {
+console.error("Element not found:", post);
+}
+}
+}
+if (settings.UserSettings.fetching.value) {
+async function processPosts() {
+if (settings.UserSettings.fetching.value) {
+if (search) {
+let posts = document.querySelectorAll('article.post'); // Get all posts
+let totalPosts = posts.length;
 
-    function generateSubOptionHTML(input, path) {
-        var settingsHTML = '';
-        $.each(input, function (key, value) {
-            if (value.name !== undefined) {
-                var checked = '';
-                var subOpsHidden = '';
-                if (value.value) {
-                    checked = ' checked';
-                } else {
-                    subOpsHidden = ' style="display: none;"';
-                }
-                if (value.if !== undefined) {
-                    var parentPath = objpath(settings.UserSettings, path.substring(0, path.length - '.suboptions.'.length));
-                    var pattTest = new RegExp(parentPath.value.value);
-                    var ifMet = false;
-                    $.each(value.if, function (i, v) {
-                        if (pattTest.test(v)) {
-                            ifMet = true;
-                            return false;
-                        }
-                    });
-                    if (ifMet) {
-                        settingsHTML += '<div>';
-                    } else {
-                        settingsHTML += '<div style="display:none;">';
-                    }
-                } else {
-                    settingsHTML += '<div>';
-                }
-                settingsHTML += '<div class="settingFlexContainer">';
-                if (value.suboptions !== undefined && Object.keys(value.suboptions).length > 1) {
-                    settingsHTML += '<div class="settingsJoinLine';
-                    if (value.type === "checkbox") {
-                        settingsHTML += ' settingsJoinLineCheckbox';
-                    }
-                    settingsHTML += '"' + subOpsHidden + '></div>';
-                }
-                settingsHTML += '<label>';
-                switch (value.type) {
-                    case "checkbox":
-                        settingsHTML += '<input type="checkbox" name="' + value.name + '" key="' + key + '"' + checked + ' path="' + path + key + '">';
-                        break;
-                    case "text":
-                        settingsHTML += '<input type="text" name="' + value.name + '" key="' + key + '" value="' + value.value + '" path="' + path + key + '">';
-                        break;
-                    case "number":
-                        settingsHTML += '<input type="number" name="' + value.name + '" key="' + key + '" value="' + value.value + '" path="' + path + key + '">';
-                        break;
-                    case "select":
-                        settingsHTML += '<select name="' + value.name + '" key="' + key + '" path="' + path + key + '">';
-                        $.each(value.value.options, function (i, v) {
-                            settingsHTML += '<option';
-                            if (v == value.value.value) {
-                                settingsHTML += ' selected';
-                            }
-                            settingsHTML += '>' + v + '</option>';
-                        });
-                        settingsHTML += '</select>';
-                        break;
-                }
-                settingsHTML += value.name + ': </label><span class="description">' + value.description + '</span></div>';
-                if (value.suboptions !== undefined) {
-                    settingsHTML += '<div class="suboption-list"' + subOpsHidden + '>' + generateSubOptionHTML(value.suboptions, path + key + '.suboptions.') + '</div>';
-                }
-                settingsHTML += '</div>';
-            }
-        });
-        return settingsHTML;
-    }
+const url = document.URL;
+var wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
+if(url.split('/')[2].includes('b4k')){
+wait = 15000
+}
 
-    function settingsStrip(input) {
-        var obj = {};
-        $.each(input, function (key, value) {
-            obj[key] = {};
-            obj[key].value = value.value;
-            if (value.suboptions !== undefined) {
-                obj[key].suboptions = settingsStrip(value.suboptions);
-            }
-        });
-        return obj;
-    }
+// Sequentially process each post with a delay
+for (let i = 0; i < totalPosts; i++) {
+await processPost(posts[i]); // Process each post
+await delay(wait); // Delay between each request to avoid too many requests
+}
 
-    $(function () {
-        shortcut.add("ctrl+s", function () {
-            executeShortcut("spoiler");
-        });
-        shortcut.add("ctrl+i", function () {
-            executeShortcut("i");
-        });
-        shortcut.add("ctrl+b", function () {
-            executeShortcut("b");
-        });
-        shortcut.add("ctrl+u", function () {
-            executeShortcut("u");
-        });
-        shortcut.add("q", function () {
-            quickReply();
-        }, { "disable_in_input": true });
-        shortcut.add("ctrl+q", function () {
-            quickReplyOptions();
-        }, { "disable_in_input": false });
-        shortcut.add("f", function () {
-            if (settings.UserSettings.favicon.value) {
-                canfav();
-            }
-        }, { "disable_in_input": true });
-        shortcut.add("g", function () {
-            if (settings.UserSettings.gallery.value) {
-                galleryToggle();
-            }
-        }, { "disable_in_input": true });
-        shortcut.add("left", function () {
-            if (settings.UserSettings.gallery.value) {
-                galleryChange("left");
-            }
-        }, { "disable_in_input": true });
-        shortcut.add("right", function () {
-            if (settings.UserSettings.gallery.value) {
-                galleryChange("right");
-            }
-        }, { "disable_in_input": true });
-        shortcut.add("o", function () {
-            populateSettingsMenu();
-        }, { "disable_in_input": true });
-        if (Page.is('thread')) {
-            seenPosts();
-            ThreadUpdate();
-            window.setInterval(function () {
-                ThreadUpdate();
-            }, 250);
-        }
-    })
-    if (settings.UserSettings.threading.value) {
-        let open = [];
-        let posts = getPosts(); // Assuming getPosts() returns a jQuery object
-        let pUrl = document.URL.split('/');
-        let pLast = pUrl[pUrl.length - 1]
-
-        // Check if the post starts with '#'
-        if (pLast.charAt(0) === '#') {
-            let post = `#${pLast.substring(1)}`; // Construct the ID selector
-            focused = $(post)[0]
-            focused.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        // Function to handle clicks
-        function handleClicks(aElems) {
-            let queue = [...aElems]; // Start with the initial elements
-
-            while (queue.length > 0) {
-                let a = queue.shift(); // Remove the first element from the queue
-                let i = a.dataset.post;
-
-                if (i && !open.includes(i)) {
-                    // Simulate a click event
-                    const event = {
-                        target: a,
-                        originalEvent: new MouseEvent('click', {
-                            bubbles: true,
-                            cancelable: true,
-                            button: 0
-                        }),
-                        which: 1, // Left mouse button
-                        preventDefault: () => { }, // Dummy preventDefault function
-                    };
-                    clickHandler(event, true); // Call clickHandler
-
-                    // Refresh posts
-                    let postsElement = a.closest('.post');
-                    if (!postsElement) continue; // Skip if no posts
-
-                    let newSelector = inverse ? `.text > #i${i} .text .backlink` : ".post_backlink > a.backlink"
-                    let $newPosts = $(postsElement).find(newSelector).toArray(); // Find new links
-
-                    // Queue new links
-                    for (let newPost of $newPosts) {
-                        let newPostId = newPost.dataset.post;
-                        if (newPostId && !open.includes(newPostId)) {
-                            queue.push(newPost); // Add to the queue
-                        }
-                    }
-
-                    open.unshift(i); // Mark this post as opened
-                }
-            }
-        }
-
-        // Iterate through each post in the correct order
-        if (inverse) {
-            // From last post to first
-            for (let index = posts.length - 1; index >= 0; index--) {
-                let $p = $(posts[index]); // Convert p to a jQuery object
-                let links = $p.find('.text .backlink'); // Find inlined backlinks
-                handleClicks(links.toArray()); // Handle clicks on inlined links
-                let mentions = $('.post_backlink > .backlink'); // Find inlined backlinks
-
-                // Filter mentions to only include those that correspond to existing posts
-                let validMentions = mentions.filter(function () {
-                    let postId = $(this).data('post'); // Get the post ID from the mention
-                    return $('#' + postId).hasClass('post'); // Check if the post exists
-                });
-
-                // Handle clicks on the valid mentions
-                //validMentions.each(function () { handleClicks([this]); });
-                console.log($p, $p.attr('id'), links.length, links); // Log info about the post
-            }
-        }
-        if (!inverse) {
-            // From reverse first post to last
-            $.each(posts.toArray().reverse(), function (index, p) {
-                let $p = $(p); // Convert p to a jQuery object
-                let links = $p.find('.post_backlink > a.backlink'); // Find non-inlined backlinks
-                handleClicks(links.toArray()); // Handle clicks on non-inlined links
-                console.log($p, $p.attr('id'), links.length, links); // Log info about the post
-            });
-        }
-        $.each(posts, function (index, p) {
-            let $p = $(p); // Convert p to a jQuery object
-            let links = $p.find('.post_controls'); // Find non-inlined backlinks
-            links.each(function () {
-                let $this = $(this);
-                let $button = $('<button class="OP-button">OP</button>');
-                $button.css({
-                    'height': $this.height(),
-                    'border-radius': '50%',
-                    'color': 'white',
-                    'background': '#220044'
-                });
-                $this.after($button);
-
-
-                $button.click(async function () {
-                    console.log("OP button clicked");
-                    let opElem = $(getOp()[1]).clone();
-                    if (search) {
-                        console.log("Fetching OP for search result:", $this.closest('article.post')[0].id);
-                        opElem = await fetchOp($this.closest('article.post')[0].id);
-                        console.log("Fetched OP element:", opElem);
-                    }
-                    opElem.find('aside, #reply, .thread_tools_bottom, .js_hook_realtimethread').remove();
-
-                    // Remove duplicate backlink lists to prevent "Quoted By" duplicates
-                    opElem.find('.backlink_list').remove();
-
-                    // Set the border style
-                    opElem.css('border', '2px solid #773311');
-
-                    // Find the parent element
-                    let parent = $this.parent();
-                    let $inlineOp = parent.next('.inline-op');
-
-                    if (!$inlineOp.length) {
-                        console.log("Creating new inline-op element");
-                        // Create the new inline-op element
-                        let newInlineOp = $('<div class="inline-op"></div>')[0];
-                        parent.after(newInlineOp);
-
-                        // If opElem is a jQuery object, convert it to a DOM element
-                        if (opElem instanceof jQuery) {
-                            console.log("Appending jQuery opElem to newInlineOp");
-                            newInlineOp.appendChild(opElem[0]);
-
-                            // Process images in the cloned OP post - use a more direct selector
-                            setTimeout(() => {
-                                console.log("Processing images in opElem");
-                                // First try to process the entire inline-op element
-                                let $inlineOpElement = $(newInlineOp);
-
-                                // Log what we're processing
-                                console.log("Processing images in:", $inlineOpElement);
-                                console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
-
-                                // Process images directly on the opElem first
-                                inlineImages(opElem);
-
-                                // Then process the entire inline-op element
-                                inlineImages($inlineOpElement);
-
-                                // If we need to handle gifs that should be paused
-                                if (settings.UserSettings.inlineImages &&
-                                    settings.UserSettings.inlineImages.suboptions &&
-                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
-                                    !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-                                    pauseGifs($inlineOpElement.find('img'));
-                                }
-                            }, 100);
-                        } else {
-                            console.log("Appending HTML string opElem to newInlineOp");
-                            newInlineOp.innerHTML += opElem;
-
-                            // Process images in the HTML string case
-                            setTimeout(() => {
-                                console.log("Processing images in HTML string case");
-                                let $inlineOpElement = $(newInlineOp);
-
-                                // Log what we're processing
-                                console.log("Processing images in:", $inlineOpElement);
-                                console.log("Found thread_image_box elements:", $inlineOpElement.find('.thread_image_box').length);
-
-                                // Process all children
-                                inlineImages($inlineOpElement.children());
-
-                                // If we need to handle gifs that should be paused
-                                if (settings.UserSettings.inlineImages &&
-                                    settings.UserSettings.inlineImages.suboptions &&
-                                    settings.UserSettings.inlineImages.suboptions.autoplayGifs &&
-                                    !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-                                    pauseGifs($inlineOpElement.find('img'));
-                                }
-                            }, 100);
-                        }
-                    } else {
-                        // If it exists, remove the inline-op element
-                        $inlineOp.remove();
-                    }
-                });
-            });
-        });
-        if (pLast.charAt(0) === '#') {
-
-            let post = `#r${pLast.substring(1)}`; // Construct the ID selector
-            let targetElement = $(post)[0]; // Get the DOM element
-            if (targetElement) {
-                const scrollToElement = () => {
-                    targetElement = $(post)[0]; // Get the DOM element
-                    targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
-                };
-                scrollToElement()
-                let is = 0
-                // Start the interval to scroll the element into view every 500 milliseconds
-                const intervalId = setInterval(() => {
-                    //const rect = targetElement.getBoundingClientRect();
-                    //const isInView = rect.top >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight);
-
-                    // If the element is not in view, scroll to it
-                    //if (!isInView) {
-                  if(is > 3){
-                    clearInterval(intervalId)
-                    return
-                  }
-                    scrollToElement();
-                    is+=1
-                    //}
-                }, 200); // Adjust the interval time as needed
-
-                // Function to handle wheel events
-                const handleWheel = () => {
-                    clearInterval(intervalId);
-                    console.log("Scrolling stopped due to user interaction.");
-                    // Optionally, you can remove the event listener if you only want to stop once
-                    window.removeEventListener('wheel', handleWheel);
-                };
-
-                // Add the event listener for wheel events
-                window.addEventListener('wheel', handleWheel);
-            } else {
-                console.error("Element not found:", post);
-            }
-        }
-    }
-    if (settings.UserSettings.fetching.value) {
-        async function processPosts() {
-            if (settings.UserSettings.fetching.value) {
-                if (search) {
-                    let posts = document.querySelectorAll('article.post'); // Get all posts
-                    let totalPosts = posts.length;
-
-                    const url = document.URL;
-                    var wait = url.split('/')[2].includes('4plebs') || url.split('/')[2].includes('archived.moe') ? 1000 : 50;
-                    if(url.split('/')[2].includes('b4k')){
-                      wait = 15000
-                    }
-
-                    // Sequentially process each post with a delay
-                    for (let i = 0; i < totalPosts; i++) {
-                        await processPost(posts[i]); // Process each post
-                        await delay(wait); // Delay between each request to avoid too many requests
-                    }
-
-                    // Repeat until all posts are processed
-                    if (processedPosts < totalPosts) {
-                        console.log("Not all posts processed, retrying...");
-                        await processPosts(); // Call recursively until done
-                    } else {
-                        console.log("All posts processed successfully.");
-                    }
-                }
-            }
-        }
-        // Call the async function to start processing posts
-        processPosts();
-    }
+// Repeat until all posts are processed
+if (processedPosts < totalPosts) {
+console.log("Not all posts processed, retrying...");
+await processPosts(); // Call recursively until done
+} else {
+console.log("All posts processed successfully.");
+}
+}
+}
+}
+// Call the async function to start processing posts
+processPosts();
+}
 });
