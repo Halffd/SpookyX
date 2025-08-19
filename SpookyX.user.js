@@ -21,8 +21,6 @@
 // @include       https://*ch.archive.horse*
 // @include       http://boards.fireden.net/*
 // @include       https://boards.fireden.net/*
-// @include       http://archived.moe/*
-// @include       https://archived.moe/*
 // @include       http://archiveofsins.com/*
 // @include       https://archiveofsins.com/*
 // @include       http://thebarchive.com/*
@@ -1258,6 +1256,53 @@ if (!postElement || !postElement.id) {
     updateStatus();
     processNextBacklink();
 }
+
+function getContinentColor(country) {
+  const continentMap = {
+    // Europe - Blue tones
+    'United Kingdom': '#4285f4', 'Germany': '#1976d2', 'France': '#3f51b5',
+    'Italy': '#5c6bc0', 'Spain': '#7986cb', 'Netherlands': '#3949ab',
+    'Poland': '#303f9f', 'Russia': '#1a237e', 'Sweden': '#536dfe',
+
+    // North America - Green tones
+    'United States': '#388e3c', 'Canada': '#4caf50', 'Mexico': '#66bb6a',
+
+    // Asia - Red/Orange tones
+    'China': '#f44336', 'Japan': '#ff5722', 'India': '#ff7043',
+    'South Korea': '#ff8a65', 'Thailand': '#ffab91', 'Singapore': '#e57373',
+
+    // South America - Purple tones
+    'Brazil': '#9c27b0', 'Argentina': '#ba68c8', 'Chile': '#ce93d8',
+
+    // Africa - Yellow/Orange tones
+    'South Africa': '#ff9800', 'Egypt': '#ffb74d', 'Nigeria': '#ffcc02',
+
+    // Oceania - Cyan tones
+    'Australia': '#00bcd4', 'New Zealand': '#26c6da'
+  }
+
+  return continentMap[country] || '#757575' // Default gray
+}
+
+function darkenColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16)
+  const amt = Math.round(2.55 * percent)
+  const R = (num >> 16) - amt
+  const G = (num >> 8 & 0x00FF) - amt
+  const B = (num & 0x0000FF) - amt
+  return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+    (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+    (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
+}
+
+function getTextColor(bgColor) {
+  const hex = bgColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+  return brightness > 128 ? '#000' : '#fff'
+}
 const processPost = async (post) => {
     if (!post) {
         console.error("processPost called with undefined post");
@@ -1295,7 +1340,40 @@ const processPost = async (post) => {
         console.log(`No anchor element found for post ${id}`);
         return;
     }
+    let countryParent = $p.find(".post_type")
 
+    let country = $p.find(".flag")
+    try {
+      if(country.length != 0){
+        country.each(function() {
+          let $flag = $(this)
+          let title = this.title || $flag.attr('title') || ''
+
+          // Get continent color
+          let color = getContinentColor(title)
+
+
+  $flag.css({
+    'transform': 'scale(1.8)',
+    'transform-origin': 'left center',
+            'margin-right': '20px'
+  })
+          $flag.parent().css({
+            'padding': '2px 6px',
+            'font-size': '11px',
+            'font-weight': '400',
+            'border-radius': '2px',
+            'border': '1px solid ' + darkenColor(color, 20),
+            'background-color': darkenColor(color, 35),
+            'color': getTextColor(color),
+            'text-transform': 'uppercase',
+            'letter-spacing': '0.5px'
+          }).append(' ' + title)
+        })
+      }
+    } catch(e) {
+      console.warn(e)
+    }
     try {
         // Use your existing fetchRepliesWithRetry function
         let replies = await fetchRepliesWithRetry(aElem);
