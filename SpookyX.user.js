@@ -46,6 +46,109 @@
 var linksClicked = []
 var focused = { 'id': null }
 const inverse = !true;
+// Graph structure to track post relationships
+class PostGraph {
+    constructor() {
+        this.nodes = new Map(); // postId -> {data, replies: Set, parent: postId}
+        this.roots = new Set(); // Root posts (OPs or posts with no parent)
+    }
+
+    addPost(postId, data, parentId = null) {
+        let node;
+        if (!this.nodes.has(postId)) {
+            node = {
+                data: data,
+                replies: new Set(),
+                parent: parentId,
+                id: postId
+            };
+            this.nodes.set(postId, node);
+        } else {
+            node = this.nodes.get(postId);
+            // If we found a parent for an existing node that didn't have one
+            if (parentId && !node.parent) {
+                node.parent = parentId;
+            }
+        }
+
+        console.log(`Added post ${postId}  parent ${node.parent}`);
+
+        if (node.parent) {
+            if (this.nodes.has(node.parent)) {
+                this.nodes.get(node.parent).replies.add(postId);
+            }
+            // A node with a parent can't be a root
+            if (this.roots.has(postId)) {
+                this.roots.delete(postId);
+            }
+        } else {
+            // No parent, so it's a root (for now)
+            this.roots.add(postId);
+        }
+    }
+
+    // DFS to find root of reply chain
+    findRoot(postId) {
+        const visited = new Set();
+        
+        const dfs = (currentId) => {
+            if (visited.has(currentId)) return currentId; // Cycle detection
+            visited.add(currentId);
+            
+            const node = this.nodes.get(currentId);
+            if (!node || !node.parent || this.roots.has(currentId)) {
+                return currentId;
+            }
+            return dfs(node.parent);
+        };
+        
+        return dfs(postId);
+    }
+    
+    // BFS to get all posts in reply chain ordered by level
+    getReplyChainBFS(rootId, includeOP = true) {
+        const result = [];
+        const queue = [{id: rootId, level: 0}];
+        const visited = new Set();
+        
+        while (queue.length > 0) {
+            const {id, level} = queue.shift();
+            
+            if (visited.has(id)) continue;
+            visited.add(id);
+            
+            const node = this.nodes.get(id);
+            if (!node) continue;
+            
+            // Skip OP if not wanted
+            if (level === 0 && !includeOP) {
+                console.log(`OP skipped: ${id}`)
+                // Add children to queue
+                for (const replyId of node.replies) {
+                    queue.push({id: replyId, level: level + 1});
+                }
+                continue;
+            }
+            
+            result.push({
+                id: id,
+                level: level,
+                data: node.data,
+                replies: Array.from(node.replies)
+            });
+            
+            // Add children to queue
+            for (const replyId of node.replies) {
+                queue.push({id: replyId, level: level + 1});
+            }
+        }
+        
+        return result;
+    }
+}
+
+// Global graph instance
+var postGraph = new PostGraph();
 
 function adjustColor(currentColor, adjustments) {
     const rgb = currentColor.match(/\d+/g).map(Number); // Extract RGB values
@@ -804,26 +907,6 @@ const fetchPostElem = async (id) => {
 };// In your fetchData function, remove this line:
 // xhr.setRequestHeader('Referer', currentUrl);
 
-// Modified fetchData function
-const fetchData = async (url, data) => {
-    try {
-        const response = await jQuery.ajax({
-            url: url,
-            type: 'GET',
-            data: data,
-            dataType: 'json',
-            timeout: 15000,
-            beforeSend: function(xhr) {
-                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                // Remove the Referer line - browsers won't allow it
-            }
-        });
-        return response;
-    } catch (error) {
-        console.error('Fetch error:', error);
-        throw error;
-    }
-};
 // Get the main thread
 const getMainThread = () => {
     const threadElement = document.querySelector('#main > article.thread');
@@ -841,13 +924,6 @@ const extractLinkData = (post) => {
     const linkElement = post.querySelector("a") || post;
     const postId = linkElement.getAttribute("data-post");
     return [postId, linkElement];
-};
-
-// Fetch a single post using the generic request function
-const fetchPost = async (board, postId) => {
-    const repliesUrl = `${backend_vars.api_url}_/api/chan/post/`;
-    const data = { board, num: postId };
-    return fetchData(repliesUrl, data);
 };
 
 // Helper function to process post data and update the placeholder
@@ -1009,13 +1085,83 @@ const extractThreadInfo = (link) => {
     }
 
     const href = link.get(0).href;
+    console.log('Extracting from href:', href);
+    
+    let threadId = null;
+    let postNumber = null;
+
+    // Try different URL patterns
     const parts = href.split('/');
-    const threadId = parts[parts.indexOf('thread') + 1];
-    const postNumber = parts[parts.indexOf('thread') + 2].substring(1);
-    opsId.push(postNumber)
+    
+    // Pattern 1: /board/thread/12345/#67890
+    const threadIndex = parts.indexOf('thread');
+    if (threadIndex !== -1 && threadIndex + 1 < parts.length) {
+        threadId = parts[threadIndex + 1];
+        
+        // Check for hash fragment
+        const hashPart = href.split('#')[1];
+        if (hashPart) {
+            postNumber = hashPart.replace(/[^\d]/g, '');
+        } else if (threadIndex + 2 < parts.length) {
+            postNumber = parts[threadIndex + 2].replace(/[^\d]/g, '');
+        }
+    }
+    
+    // Pattern 2: /board/post/12345/
+    const postIndex = parts.indexOf('post');
+    if (postIndex !== -1 && postIndex + 1 < parts.length) {
+        postNumber = parts[postIndex + 1].replace(/[^\d]/g, '');
+        // For single posts, thread ID might be the same as post number
+        threadId = threadId || postNumber;
+    }
+    
+    // Fallback: try to extract numbers from the URL
+    if (!postNumber) {
+        const numberMatch = href.match(/(\d+)/g);
+        if (numberMatch && numberMatch.length > 0) {
+            postNumber = numberMatch[numberMatch.length - 1]; // Use last number found
+            threadId = threadId || postNumber;
+        }
+    }
+    
+    // Final fallback: try data attributes
+    if (!postNumber) {
+        postNumber = link.data('post') || link.closest('article').attr('id')?.replace(/^r/, '');
+    }
+    
+    // Clean the values
+    threadId = String(threadId || '').replace(/[^\d]/g, '');
+    postNumber = String(postNumber || '').replace(/[^\d]/g, '');
+    
+    console.log(`extractThreadInfo result: threadId=${threadId}, postNumber=${postNumber}`);
+    
+    // Only add valid post numbers
+    if (postNumber && !isNaN(postNumber) && postNumber !== '') {
+        opsId.push(postNumber);
+    }
+    
     return [threadId, postNumber];
 };
-
+// Modified fetchData function
+const fetchData = async (url, data) => {
+    try {
+        const response = await jQuery.ajax({
+            url: url,
+            type: 'GET',
+            data: data,
+            dataType: 'json',
+            timeout: 15000,
+            beforeSend: function(xhr) {
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                // Remove the Referer line - browsers won't allow it
+            }
+        });
+        return response;
+    } catch (error) {
+        console.error('Fetch error:', error);
+        throw error;
+    }
+};
 // Get replies for a given link
 const fetchReplies = async (link) => {
     const [threadId, postNumber] = extractThreadInfo(link);
@@ -1028,11 +1174,57 @@ const fetchReplies = async (link) => {
 
     return extractReplies(postNumber, thread);
 };
-
 // Fetch thread data using the generic request function
 const fetchThread = async (board, threadId) => {
     const repliesUrl = `${backend_vars.api_url}_/api/chan/thread/`;
     const data = { board, num: threadId };
+    const threadObj = await fetchData(repliesUrl, data);
+    const thread = Object.values(threadObj)[0]
+    debugger
+    // Add all posts from thread to graph
+    if (thread && thread.posts) {
+        console.log(`Adding ${thread.posts.length} posts from thread ${threadId} to graph`);
+        
+        for (const post of Object.values(thread.posts)) {
+            const postId = String(post.num);
+            
+            // Skip if already in graph
+            if (postGraph.nodes.has(postId)) {
+                continue;
+            }
+            
+            // Determine parent relationship from post content
+            let parentId = null;
+            if (post.comment) {
+                // Look for >>postNumber references to find parent
+                const quoteMatches = post.comment.match(/&gt;&gt;(\d+)/g) || 
+                                   post.comment.match(/>>(\d+)/g) || [];
+                
+                for (const match of quoteMatches) {
+                    const quotedNum = match.replace(/&gt;&gt;|>>/g, '');
+                    // If this post quotes another post in this thread, that's the parent
+                    if (quotedNum !== postId && Object.values(thread.posts).find(p => p.num == quotedNum)) {
+                        parentId = quotedNum;
+                        break; // Use first valid quote as parent
+                    }
+                }
+            }
+            
+            // Add post to graph
+            postGraph.addPost(postId, post, parentId);
+            console.log(`Added post ${postId} to graph with parent ${parentId || 'null'}`);
+        }
+        
+        console.log(`Graph now contains ${postGraph.nodes.size} posts total`);
+    }
+    
+    return threadObj;
+};
+
+// Add back the fetchPost function too
+const fetchPost = async (board, postId) => {
+    const repliesUrl = `${backend_vars.api_url}_/api/chan/post/`;
+    const data = { board, num: postId };
     return fetchData(repliesUrl, data);
 };
 async function fetchRepliesWithRetry(aElem, retries = 3, wait = 2000) {
@@ -1103,109 +1295,6 @@ function addExpandButtonToPost(post) {
 }
 var updS = ()=>{}
 
-// Graph structure to track post relationships
-class PostGraph {
-    constructor() {
-        this.nodes = new Map(); // postId -> {data, replies: Set, parent: postId}
-        this.roots = new Set(); // Root posts (OPs or posts with no parent)
-    }
-
-    addPost(postId, data, parentId = null) {
-        let node;
-        if (!this.nodes.has(postId)) {
-            node = {
-                data: data,
-                replies: new Set(),
-                parent: parentId,
-                id: postId
-            };
-            this.nodes.set(postId, node);
-        } else {
-            node = this.nodes.get(postId);
-            // If we found a parent for an existing node that didn't have one
-            if (parentId && !node.parent) {
-                node.parent = parentId;
-            }
-        }
-
-        console.log(`Added post ${postId}  parent ${node.parent}`);
-
-        if (node.parent) {
-            if (this.nodes.has(node.parent)) {
-                this.nodes.get(node.parent).replies.add(postId);
-            }
-            // A node with a parent can't be a root
-            if (this.roots.has(postId)) {
-                this.roots.delete(postId);
-            }
-        } else {
-            // No parent, so it's a root (for now)
-            this.roots.add(postId);
-        }
-    }
-
-    // DFS to find root of reply chain
-    findRoot(postId) {
-        const visited = new Set();
-        
-        const dfs = (currentId) => {
-            if (visited.has(currentId)) return currentId; // Cycle detection
-            visited.add(currentId);
-            
-            const node = this.nodes.get(currentId);
-            if (!node || !node.parent || this.roots.has(currentId)) {
-                return currentId;
-            }
-            return dfs(node.parent);
-        };
-        
-        return dfs(postId);
-    }
-    
-    // BFS to get all posts in reply chain ordered by level
-    getReplyChainBFS(rootId, includeOP = true) {
-        const result = [];
-        const queue = [{id: rootId, level: 0}];
-        const visited = new Set();
-        
-        while (queue.length > 0) {
-            const {id, level} = queue.shift();
-            
-            if (visited.has(id)) continue;
-            visited.add(id);
-            
-            const node = this.nodes.get(id);
-            if (!node) continue;
-            
-            // Skip OP if not wanted
-            if (level === 0 && !includeOP) {
-                console.log(`OP skipped: ${id}`)
-                // Add children to queue
-                for (const replyId of node.replies) {
-                    queue.push({id: replyId, level: level + 1});
-                }
-                continue;
-            }
-            
-            result.push({
-                id: id,
-                level: level,
-                data: node.data,
-                replies: Array.from(node.replies)
-            });
-            
-            // Add children to queue
-            for (const replyId of node.replies) {
-                queue.push({id: replyId, level: level + 1});
-            }
-        }
-        
-        return result;
-    }
-}
-
-// Global graph instance
-const postGraph = new PostGraph();
 
 // Enhanced expandAllQuotes with graph traversal
 const expandAllQuotes = async (postElement, includeOP = true) => {
@@ -1280,54 +1369,74 @@ const expandAllQuotes = async (postElement, includeOP = true) => {
     }
 };
 
-// Build graph from post and its network
 async function buildPostGraph(startPost) {
     const visited = new Set();
-    const toProcess = [startPost];
+    const toProcess = [{element: startPost, data: null}];
     
     while (toProcess.length > 0) {
-        const post = toProcess.shift();
-        let postId = post.id;
-        // Better ID extraction and validation
-        if (!postId || postId === '0') {
-            console.warn('Invalid post ID:', postId, post);
-            continue;
-        }
+        const {element: post, data: existingData} = toProcess.shift();
+        let postId = post.id.replace(/^r/, '');
         
-        // Clean the ID properly
-        if (postId.startsWith('r') || postId.startsWith('#')) {
-            postId = postId.substring(1);
-        }
-        if (visited.has(postId)) continue;
+        if (!postId || visited.has(postId)) continue;
         visited.add(postId);
         
         const $post = $(post);
-        console.log(`ID: ${postId} Post: ${$post}`)
-        // Add current post to graph
-        const postData = extractPostData($post);
-        postGraph.addPost(postId, postData);
         
-        // Process backlinks (replies TO this post)
+        // Fix board extraction
+        let board = $post.data('board');
+        if (!board || board === '[object Object]') {
+            debugger
+            let post = fetchPost(postId).booard
+        }
+        
+        console.log(`Processing post ${postId} from board: "${board}"`);
+        
+        // Get post data
+        let postData = existingData;
+        if (!postData) {
+            try {
+                postData = await fetchPost(board, postId);
+            } catch (e) {
+                console.warn(`Failed to fetch post ${postId}:`, e);
+                continue;
+            }
+        }
+        
+        if (postData && !postData.error) {
+            postGraph.addPost(postId, postData);
+        }
+        
+        // Process backlinks with proper board extraction
         const backlinks = $post.find('.backlink').toArray();
-        console.log(`Backlinks: ${backlinks}`)
+        console.log(`Found ${backlinks.length} backlinks for post ${postId}`);
+        
         for (const link of backlinks) {
             const $link = $(link);
-            const replyId = $link.data('post');
-            const board = $link.data('board');
+            let replyId = $link.data('post');
+            let linkBoard = $link.data('board') || board;
             
-            if (replyId && !visited.has(replyId)) {
+            // Clean the data
+            if (replyId) replyId = String(replyId).replace(/[^\d]/g, '');
+            if (linkBoard) linkBoard = String(linkBoard).replace(/[^\w]/g, '');
+            
+            if (replyId && linkBoard && !visited.has(replyId)) {
                 try {
-                    // Fetch reply post data
-                    const replyData = await fetchPost(board, replyId);
+                    const replyData = await fetchPost(linkBoard, replyId);
                     if (replyData && !replyData.error) {
                         postGraph.addPost(replyId, replyData, postId);
                         
-                        // Create element for further processing
-                        const replyElement = createPostElement(replyData);
-                        const $replyPost = $(replyElement).find('article.post');
-                        if ($replyPost.length > 0) {
-                            toProcess.push($replyPost[0]);
-                        }
+                        // **KEY FIX**: Add replies to processing queue for recursive expansion
+                        // Create mock element for the reply so it can be processed
+                        const mockElement = {
+                            id: 'r' + replyId,
+                            querySelector: () => null
+                        };
+                        
+                        // Add to queue to process this reply's backlinks too
+                        toProcess.push({
+                            element: mockElement, 
+                            data: replyData
+                        });
                     }
                 } catch (error) {
                     console.warn(`Failed to fetch reply ${replyId}:`, error);
@@ -1335,25 +1444,59 @@ async function buildPostGraph(startPost) {
             }
         }
         
-        // Also check if this post quotes others (find parent relationships)
-        const quotes = $post.find('.greentext, .quote').toArray();
-        for (const quote of quotes) {
-            const quoteMatch = $(quote).text().match(/>>(\d+)/);
-            if (quoteMatch) {
-                const quotedId = quoteMatch[1];
-                if (!visited.has(quotedId)) {
-                    // This post quotes quotedId, so quotedId is parent
-                    const existingNode = postGraph.nodes.get(postId);
-                    if (existingNode && !existingNode.parent) {
-                        existingNode.parent = quotedId;
-                        postGraph.addPost(quotedId, null); // Placeholder
+        // **ADDITIONAL FIX**: Also check the fetched post data for quotes it makes
+        if (postData && (postData.com || postData.comment)) {
+            const content = postData.com || postData.comment;
+            const quoteMatches = content.match(/&gt;&gt;(\d+)/g) || content.match(/>>(\d+)/g) || [];
+            
+            console.log(`Post ${postId} quotes:`, quoteMatches);
+            
+            for (const match of quoteMatches) {
+                const quotedId = match.replace(/&gt;&gt;|>>/g, '');
+                
+                if (quotedId !== postId && !visited.has(quotedId)) {
+                    try {
+                        const quotedData = await fetchPost(board, quotedId);
+                        if (quotedData && !quotedData.error) {
+                            // Add the quoted post (this creates parent relationship)
+                            postGraph.addPost(quotedId, quotedData);
+                            // Update current post to have this as parent
+                            const currentNode = postGraph.nodes.get(postId);
+                            if (currentNode && !currentNode.parent) {
+                                currentNode.parent = quotedId;
+                                // Add current post as reply to parent
+                                const parentNode = postGraph.nodes.get(quotedId);
+                                if (parentNode) {
+                                    parentNode.replies.add(postId);
+                                }
+                            }
+                            
+                            // Add quoted post to processing queue
+                            const mockQuotedElement = {
+                                id: 'r' + quotedId,
+                                querySelector: () => null
+                            };
+                            
+                            toProcess.push({
+                                element: mockQuotedElement,
+                                data: quotedData
+                            });
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to fetch quoted post ${quotedId}:`, error);
                     }
                 }
             }
         }
     }
+    
+    console.log(`Graph building complete. Total nodes: ${postGraph.nodes.size}`);
+    
+    // Debug: log the complete graph structure
+    for (const [postId, node] of postGraph.nodes) {
+        console.log(`Post ${postId}: parent=${node.parent}, replies=[${Array.from(node.replies).join(', ')}]`);
+    }
 }
-
 // Display reply chain in BFS order
 async function displayReplyChain(replyChain, $container) {
     const $status = $('<div class="chain-status"></div>');
