@@ -43,6 +43,796 @@
 // @icon          https://i.imgur.com/LaYyYRl.png
 // ==/UserScript==
 
+
+if (GM_info === undefined) {
+    var GM_info = { script: { version: "32.50" } };
+  }
+  
+  var search = document.URL.includes("/search/");
+  var settings = {
+    UserSettings: {
+      threading: {
+        name: "Threading",
+        description: "Make posts ordered by replies below each other",
+        type: "checkbox",
+        value: true,
+      },
+      fetching: {
+        name: "Fetching Searches",
+        description: "On every search post get its mentions fromn fetches",
+        type: "checkbox",
+        value: true,
+      },
+      autoExpand: {
+        name: "Auto-Expand Searches",
+        description: "On every search post expand chain",
+        type: "checkbox",
+        value: true,
+      },
+      inlineImages: {
+        name: "Inline Images",
+        description:
+          "Load full-size images in the thread, enable click to expand",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          inlineVideos: {
+            name: "Inline Videos",
+            description:
+              "Replace thumbnails of natively posted videos with the videos themselves",
+            type: "checkbox",
+            value: true,
+            suboptions: {
+              firefoxCompatibility: {
+                name: "Firefox Compatibility Mode",
+                description:
+                  "Turn this on to allow you to use the controls on an expanded video without collapsing it",
+                type: "checkbox",
+                value: false,
+              },
+            },
+          },
+          delayedLoad: {
+            name: "Delayed Load",
+            description:
+              "Fullsize images are not automatically retrieved and used to replace the thumbnails. Instead this occurs on an individual basis when the thumbnails are clicked on",
+            type: "checkbox",
+            value: false,
+          },
+          imageHover: {
+            name: "Image Hover",
+            description:
+              "Hovering over images with the mouse brings a full or window scaled version in view",
+            type: "checkbox",
+            value: true,
+          },
+          videoHover: {
+            name: "Video Hover",
+            description:
+              "Hovering over videos with the mouse brings a full or window scaled version in view",
+            type: "checkbox",
+            value: true,
+          },
+          autoplayGifs: {
+            name: "Autoplay embedded gifs",
+            description: "Make embedded gifs play automatically",
+            type: "checkbox",
+            value: true,
+          },
+          autoplayVids: {
+            name: "Autoplay embedded videos",
+            description:
+              "Make embedded videos play automatically (they start muted, expanding unmutes)",
+            type: "checkbox",
+            value: false,
+          },
+          customSize: {
+            name: "Custom thumbnail size",
+            description: "Specify the thumbnail dimensions",
+            type: "checkbox",
+            value: false,
+            suboptions: {
+              widthOP: {
+                name: "OP image width",
+                description: "The maximum width of OP images in pixels",
+                type: "number",
+                value: 250,
+              },
+              heightOP: {
+                name: "OP image height",
+                description: "The maximum height of OP images in pixels",
+                type: "number",
+                value: 250,
+              },
+              width: {
+                name: "Post image width",
+                description: "The maximum width of post images in pixels",
+                type: "number",
+                value: 125,
+              },
+              height: {
+                name: "Post image height",
+                description: "The maximum height of post images in pixels",
+                type: "number",
+                value: 125,
+              },
+            },
+          },
+          processSpoiler: {
+            name: "Process spoilered images",
+            description: "Make native spoilered images inline",
+            type: "checkbox",
+            value: true,
+          },
+        },
+      },
+      embedImages: {
+        name: "Embed Media",
+        description: "Embed image (and other media) links in thread",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          embedVideos: {
+            name: "Embed Videos",
+            description: "Embed video links in thread",
+            type: "checkbox",
+            value: true,
+          },
+          imgNumMaster: {
+            name: "Embed Count",
+            description:
+              "The maximum number of images (or other media) to embed in each post",
+            type: "number",
+            value: 1,
+          },
+          titleYoutubeLinks: {
+            name: "Title YouTube links",
+            description:
+              "Fetches the video name and alters the link text accordingly",
+            type: "checkbox",
+            value: true,
+          },
+        },
+      },
+      autoHost: {
+        name: "Automatically Host Images",
+        description:
+          "When post is submitted image links will be automatically reuploaded to Imgur in an effort to avoid having dead 4chan image links",
+        type: "select",
+        value: {
+          value: "Reupload 4chan links",
+          options: [
+            "Don't reupload links",
+            "Reupload 4chan links",
+            "Reupload all links",
+          ],
+        },
+      },
+      embedGalleries: {
+        name: "Embed Galleries",
+        description:
+          "Embed Imgur galleries into a single post for ease of image dumps",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          showDetails: {
+            name: "Show Details",
+            description:
+              "Show the title, image description and view count for embedded Imgur albums",
+            type: "checkbox",
+            value: true,
+          },
+        },
+      },
+      gallery: {
+        name: "Gallery",
+        description:
+          "Pressing G will bring up a view that displays all the images in a thread",
+        type: "checkbox",
+        value: true,
+      },
+      hidePosts: {
+        name: "Hide Posts",
+        description: "Allow user to hide posts manually",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          recursiveHiding: {
+            name: "Recursive Hiding",
+            description: "Hide replies to hidden posts",
+            type: "checkbox",
+            value: true,
+            suboptions: {
+              hideNewPosts: {
+                name: "Hide New Posts",
+                description:
+                  "Also hide replies to hidden posts that are fetched after page load",
+                type: "checkbox",
+                value: true,
+              },
+            },
+          },
+        },
+      },
+      newPosts: {
+        name: "New Posts",
+        description: "Reflect the number of new posts in the tab name",
+        type: "checkbox",
+        value: true,
+      },
+      favicon: {
+        name: "Favicon",
+        description:
+          "Switch to a dynamic favicon that indicates unread posts and unread replies",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          customFavicons: {
+            name: "Custom Favicons",
+            description:
+              "If disabled SpookyX will try its hand at automatically generating suitable favicons for the site. Enabling this allows you to manually specify which favicons it should use instead",
+            type: "checkbox",
+            value: false,
+            suboptions: {
+              unlit: {
+                name: "Unlit",
+                description:
+                  'Choose which favicon is used normally. Default is "https://i.imgur.com/xuadeJ2.png"',
+                type: "text",
+                value: "https://i.imgur.com/xuadeJ2.png",
+              },
+              lit: {
+                name: "Lit",
+                description:
+                  'Choose which favicon is used to indicate there are unread posts. Preset numbers are 0-4, replace with link to custom image if you desire such as: "https://i.imgur.com/XGsrewo.png"',
+                type: "text",
+                value: "2",
+              },
+              alert: {
+                name: "Alert",
+                description:
+                  "The favicon that indicates unread replies to your posts. Value is ignored if using a preset Lit favicon",
+                type: "text",
+                value: "",
+              },
+              alertOverlay: {
+                name: "Alert Overlay",
+                description:
+                  'The favicon overlay that indicates unread replies. Default is "https://i.imgur.com/DCXVHHl.png"',
+                type: "text",
+                value: "https://i.imgur.com/DCXVHHl.png",
+              },
+              notification: {
+                name: "Notification image",
+                description:
+                  'The image that is displayed in SpookyX generated notifications. 64px square is ideal. Default is "https://i.imgur.com/HTcKk4Y.png"',
+                type: "text",
+                value: "https://i.imgur.com/HTcKk4Y.png",
+              },
+            },
+          },
+        },
+      },
+      labelYourPosts: {
+        name: "Label Your Posts",
+        description: "Add '(You)' to your posts and links that point to them",
+        type: "checkbox",
+        value: true,
+      },
+      inlineReplies: {
+        name: "Inline Replies",
+        description: "Click replies to expand them inline",
+        type: "checkbox",
+        value: true,
+      },
+      notifications: {
+        name: "Enable notifications",
+        description:
+          "Browser notifications will be enabled, for example to alert you when your post has been replied to or if you encountered a posting error",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          spoiler: {
+            name: "Hide spoilers",
+            description:
+              "When creating a notification to alert you of a reply the spoilered text will be replaced with black boxes since nofications cannot hide them like normal",
+            type: "checkbox",
+            value: true,
+          },
+          restrict: {
+            name: "Restrict size",
+            description:
+              "Firefox option only. By default there is no size limit on Firefox notifications, use this option to keep notifications at a sensible size",
+            type: "checkbox",
+            value: false,
+            suboptions: {
+              lines: {
+                name: "Line count",
+                description: "Number of lines the notification is restricted to",
+                type: "number",
+                value: 5,
+              },
+              characters: {
+                name: "Character count",
+                description:
+                  "Number of characters per line the notification is restricted to",
+                type: "number",
+                value: 50,
+              },
+            },
+          },
+        },
+      },
+      relativeTimestamps: {
+        name: "Relative Timestamps",
+        description: "Timestamps will be replaced by elapsed time since post",
+        type: "checkbox",
+        value: false,
+      },
+      postQuote: {
+        name: "Post Quote",
+        description:
+          "Clicking the post number will insert highlighted text into the reply box",
+        type: "checkbox",
+        value: true,
+      },
+      revealSpoilers: {
+        name: "Reveal Spoilers",
+        description:
+          "Spoilered text will be displayed without needing to hover over it",
+        type: "checkbox",
+        value: false,
+      },
+      filter: {
+        name: "Filter",
+        description: "Hide undesirable posts from view",
+        type: "checkbox",
+        value: false,
+        suboptions: {
+          filterNotifications: {
+            name: "Filter Notifications",
+            description:
+              "Enabling this will stop creating reply notifications if the reply is filtered with hide or remove mode. Purge mode filtered replies will never create notifications",
+            type: "checkbox",
+            value: true,
+          },
+          recursiveFiltering: {
+            name: "Recursive Filtering",
+            description:
+              "Posts that reply to filtered posts will also be filtered",
+            type: "checkbox",
+            value: false,
+          },
+        },
+      },
+      adjustReplybox: {
+        name: "Adjust Replybox",
+        description: "Change the layout of the reply box",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          width: {
+            name: "Width",
+            description: "Specify the default width of the reply field in pixels",
+            type: "number",
+            value: 600,
+          },
+          hideQROptions: {
+            name: "Hide QR Options",
+            description:
+              "Make the reply options hidden by default in the quick reply",
+            type: "checkbox",
+            value: true,
+          },
+          removeReset: {
+            name: "Remove Reset",
+            description:
+              "Remove the reset button from the reply box to prevent unwanted usage",
+            type: "checkbox",
+            value: false,
+          },
+        },
+      },
+      postCounter: {
+        name: "Post Counter",
+        description: "Add a post counter to the reply box",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          location: {
+            name: "Location",
+            description: "Specify where the post counter is placed",
+            type: "select",
+            value: { value: "Header bar", options: ["Header bar", "Reply box"] },
+          },
+          limits: {
+            name: "Show count limits",
+            description: "Adds count denominators, purely aesthetic",
+            type: "checkbox",
+            value: false,
+            suboptions: {
+              posts: {
+                name: "Posts",
+                description: "Specify the posts counter denominator",
+                type: "number",
+                value: 400,
+              },
+              images: {
+                name: "Images",
+                description: "Specify the images counter denominator",
+                type: "number",
+                value: 250,
+              },
+            },
+          },
+          countUnloaded: {
+            name: "Count unloaded posts",
+            description:
+              "If only viewing the last x posts in a thread use this setting for the post counter to count the total number of posts rather than just the number of posts that have been loaded",
+            type: "checkbox",
+            value: true,
+          },
+          countHidden: {
+            name: "Count hidden posts",
+            description:
+              "Adds a counter that displays how many posts of the total count are hidden",
+            type: "checkbox",
+            value: true,
+            suboptions: {
+              hideNullHiddenCounter: {
+                name: "Auto-hide null hidden counter",
+                description:
+                  "If there are no hidden posts the post counter will not display the hidden counter",
+                type: "checkbox",
+                value: true,
+              },
+            },
+          },
+        },
+      },
+      mascot: {
+        name: "Mascot",
+        description:
+          "Place your favourite mascot on the background to keep you company!",
+        type: "checkbox",
+        value: false,
+        suboptions: {
+          mascotImage: {
+            name: "Mascot image",
+            description:
+              "Specify a link to your custom mascot or leave blank for SpookyX defaults",
+            type: "text",
+            value: "",
+          },
+          corner: {
+            name: "Corner",
+            description: "Specify which corner to align the mascot to",
+            type: "select",
+            value: {
+              value: "Bottom Right",
+              options: ["Top Right", "Bottom Right", "Bottom Left", "Top Left"],
+            },
+          },
+          zindex: {
+            name: "Z-index",
+            description:
+              "Determine what page elements the mascot is in front and behind of. Default value is -1",
+            type: "number",
+            value: -1,
+          },
+          opacity: {
+            name: "Opacity",
+            description: "Specify the opacity of the mascot, ranges from 0 to 1",
+            type: "number",
+            value: 1,
+          },
+          clickthrough: {
+            name: "Click-through",
+            description:
+              "Allow you to click through the mascot if it is on top of buttons, etc",
+            type: "checkbox",
+            value: true,
+          },
+          width: {
+            name: "Width",
+            description:
+              "Specify the width of the mascot in pixels. Use a negative number to leave it as the image's default width",
+            type: "number",
+            value: -1,
+          },
+          x: {
+            name: "Horizontal Displacement",
+            description:
+              "Specify horizontal displacement of the mascot in pixels",
+            type: "number",
+            value: 0,
+          },
+          y: {
+            name: "Vertical Displacement",
+            description: "Specify vertical displacement of the mascot in pixels",
+            type: "number",
+            value: 0,
+          },
+          mute: {
+            name: "Mute videos",
+            description: "If using a video for a mascot the sound will be muted",
+            type: "checkbox",
+            value: true,
+          },
+        },
+      },
+      postFlow: {
+        name: "Adjust post flow",
+        description: "Change the way posts are laid out in the page",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          leftMargin: {
+            name: "Left margin",
+            description:
+              "Specify the width in pixels of the gap between the start of the posts and the left side of the screen. Negative values set it to equal the mascot width",
+            type: "number",
+            value: 0,
+          },
+          rightMargin: {
+            name: "Right margin",
+            description:
+              "Specify the width in pixels of the gap between the end of the posts and the right side of the screen. Negative values set it to equal the mascot width",
+            type: "number",
+            value: 0,
+          },
+          align: {
+            name: "Align",
+            description: "Specify how posts are aligned",
+            type: "select",
+            value: { value: "Left", options: ["Left", "Center", "Right"] },
+          },
+          wordBreak: {
+            name: "Word-break",
+            description:
+              "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
+            type: "select",
+            value: {
+              value: "Auto",
+              options: ["Auto", "Break-all", "Normal", "Overflow-Wrap"],
+            },
+          },
+        },
+      },
+      headerBar: {
+        name: "Adjust Headerbar behaviour",
+        description: "Determine whether the headerbar hides and how it does so",
+        type: "checkbox",
+        value: true,
+        suboptions: {
+          behaviour: {
+            name: "Behaviour",
+            description:
+              "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
+            type: "select",
+            value: {
+              value: "Collapse to button",
+              options: ["Always show", "Full hide", "Collapse to button"],
+            },
+            suboptions: {
+              scroll: {
+                name: "Hide on scroll",
+                description:
+                  "Scrolling up will show the headerbar, scrolling down will hide it again",
+                if: ["Full hide", "Collapse to button"],
+                type: "checkbox",
+                value: false,
+              },
+              defaultHidden: {
+                name: "Default state hidden",
+                description:
+                  "Check to make the headerbar hidden or collapsed by default on pageload",
+                if: ["Full hide", "Collapse to button"],
+                type: "checkbox",
+                value: true,
+              },
+              contractedForm: {
+                name: "Customise contracted form",
+                description:
+                  "Specify what the contracted headerbar form contains",
+                if: ["Collapse to button"],
+                type: "checkbox",
+                value: true,
+                suboptions: {
+                  settings: {
+                    name: "Settings button",
+                    description:
+                      "Display the settings button in contracted headerbar",
+                    type: "checkbox",
+                    value: false,
+                  },
+                  postCounter: {
+                    name: "Post counter",
+                    description:
+                      "Display the post counter stats in contracted headerbar",
+                    type: "checkbox",
+                    value: true,
+                  },
+                },
+              },
+            },
+          },
+          shortcut: {
+            name: "Hide shortcut",
+            description: "Pressing H will toggle the visiblity of the headerbar",
+            type: "checkbox",
+            value: true,
+          },
+        },
+      },
+      removeJfont: {
+        name: "Remove Japanese Font",
+        description:
+          "Enabling this will make the addition of japanese characters to a post cease to change the post font and size. Presumably will cause issues for people whose default font doesn't support japanese characters",
+        type: "checkbox",
+        value: false,
+      },
+      labelDeletions: {
+        name: "Label Deletions",
+        description:
+          "Enabling this will add 'Deleted' to all trashcan icons that designate deleted posts to allow for easier searching",
+        type: "checkbox",
+        value: false,
+      },
+    },
+    FilterSettings: {
+      name: {
+        name: "Name",
+        value: [{ comment: "#/久保島のミズゴロウ/;" }],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".post_author").html();
+        },
+        responseObjFunction: function (response) {
+          return response["name_processed"];
+        },
+      },
+      tripcode: {
+        name: "Tripcode",
+        value: [
+          { comment: "#/!!/90sanF9F3Z/;" },
+          { comment: "#/!!T2TCnNZDvZu/;" },
+        ],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".post_tripcode").html();
+        },
+        responseObjFunction: function (response) {
+          return response["trip_processed"];
+        },
+      },
+      uniqueID: {
+        name: "Unique ID",
+        value: [
+          { comment: "# Remember to escape any special characters" },
+          { comment: "# For example these are valid:" },
+          { comment: "#/bUAl\\+t9X/;" },
+          { comment: "#/ID:bUAl\\+t9X/;" },
+          { comment: "# But this fails:" },
+          { comment: "#/bUAl+t9X/; " },
+          {
+            comment:
+              "# It's also worth noting that prefixing it with 'ID:' can cause the filter to fail to accurately detect when using recursive filtering. To assure it works fully stick to just using the hash like 'bUAl+t9X'",
+          },
+        ],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".poster_hash").html();
+        },
+        responseObjFunction: function (response) {
+          return response["poster_hash_processed"];
+        },
+      },
+      capcode: {
+        name: "Capcode",
+        value: [
+          { comment: "# Set a custom class for mods:" },
+          { comment: "#/Mod$/;highlight:mod;" },
+          { comment: "# Set a custom class for moot:" },
+          { comment: "#/Admin$/;highlight:moot;" },
+          { comment: "# (highlighting isn't implemented yet)" },
+          {
+            comment:
+              "# For recursive filter to always work you will need to add regex lines for M, A & D for Moderators, Admins and Developers respectively",
+          },
+          {
+            comment:
+              "# e.g. /A/; will filter Admins accurately always whilst /Admin/; won't always work for recursively filtered posts",
+          },
+        ],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".post_level").html();
+        },
+        responseObjFunction: function (response) {
+          return response["capcode"];
+        },
+      },
+      subject: {
+        name: "Subject",
+        value: [{ comment: "#/(^|[^A-z])quest([^A-z]|$)/i;boards:tg;" }],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".post_title").html();
+        },
+        responseObjFunction: function (response) {
+          return response["title_processed"];
+        },
+      },
+      comment: {
+        name: "Comment",
+        value: [{ comment: "#/daki[\\\\S]*/i; boards:tg;" }],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".text").html();
+        },
+        responseObjFunction: function (response) {
+          return response["comment"];
+        },
+      },
+      flag: {
+        name: "Flag",
+        value: [
+          { comment: "#Remove kebob" },
+          { comment: "#/turkey/i;mode:remove;" },
+        ],
+        threadPostFunction: function (currentPost) {
+          return $(currentPost).find(".flag").attr("title");
+        },
+        responseObjFunction: function (response) {
+          return response["poster_country_name_processed"];
+        },
+      },
+      filename: {
+        name: "Filename",
+        value: [],
+        threadPostFunction: function (currentPost) {
+          var combined = "";
+          if ($(currentPost).hasClass("thread")) {
+            combined = $(currentPost).find(".post_file_filename").html();
+          } else {
+            $.each($(currentPost).find(".post_file_filename"), function () {
+              combined += this.innerHTML;
+            });
+          }
+          return combined;
+        },
+        responseObjFunction: function (response) {
+          if (response["media"] === null || response["media"] === undefined) {
+            return "";
+          }
+          return response["media"]["media_filename_processed"];
+        },
+      },
+      fileurl: {
+        name: "File URL",
+        value: [
+          { comment: "# Filter by site for example:" },
+          { comment: "#/tumblr/;" },
+        ],
+        threadPostFunction: function (currentPost) {
+          var combined = "";
+          var $currentPost = $(currentPost);
+          if ($currentPost.hasClass("thread")) {
+            var $currentPostFilename = $currentPost.find(".post_file_filename");
+            if ($currentPostFilename.length) {
+              combined = $currentPostFilename[0].href;
+            }
+          } else {
+            $.each($currentPost.find(".post_file_filename"), function () {
+              combined += this.href;
+            });
+          }
+          return combined;
+        },
+        responseObjFunction: function (response) {
+          if (response["media"] === null || response["media"] === undefined) {
+            return "";
+          }
+          return response["media"]["remote_media_link"];
+        },
+      },
+    },
+  };
 var linksClicked = [];
 var focused = { id: null };
 const inverse = !true;
@@ -2015,6 +2805,18 @@ const processPost = async (post) => {
   try {
     // Use your existing fetchRepliesWithRetry function
     let replies = await fetchRepliesWithRetry(aElem);
+    // Auto-expand if enabled and this is first page load
+    if (
+        settings.UserSettings.autoExpand.value &&
+      !autoExpandProcessed.has(id)
+    ) {
+      autoExpandProcessed.add(id);
+
+      setTimeout(() => {
+        console.log(`Auto-expanding post ${id} with ${replies.length} replies`);
+        expandAllQuotes(post);
+      }, Math.random() * 2000 + 1000);
+    }
 
     if (!replies || replies.length === 0) {
       console.log(`No replies found for post ${id}`);
@@ -2048,19 +2850,6 @@ const processPost = async (post) => {
     // Add individual expand button to post controls
     addExpandButtonToPost(post);
 
-    // Auto-expand if enabled and this is first page load
-    if (
-      autoExpandEnabled &&
-      !autoExpandProcessed.has(id) &&
-      replies.length > 0
-    ) {
-      autoExpandProcessed.add(id);
-
-      setTimeout(() => {
-        console.log(`Auto-expanding post ${id} with ${replies.length} replies`);
-        expandAllQuotes(post);
-      }, Math.random() * 2000 + 1000);
-    }
 
     console.log("Replies: ", replies, repliesElems);
     processedPosts++;
@@ -2072,7 +2861,7 @@ const processPost = async (post) => {
 };
 // Function to enable/disable auto-expansion
 function toggleAutoExpand() {
-  autoExpandEnabled = !autoExpandEnabled;
+    settings.UserSettings.autoExpand.value = !settings.UserSettings.autoExpand.value;
   console.log(`Auto-expansion ${autoExpandEnabled ? "enabled" : "disabled"}`);
 
   // Add visual indicator
@@ -2080,15 +2869,15 @@ function toggleAutoExpand() {
   if ($indicator.length === 0) {
     $("body").append(
       `<div id="auto-expand-indicator" style="position: fixed; top: 10px; right: 10px; background: ${
-        autoExpandEnabled ? "#4CAF50" : "#f44336"
+        settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336"
       }; color: white; padding: 5px 10px; border-radius: 3px; z-index: 9999; font-size: 12px;">Auto-expand: ${
-        autoExpandEnabled ? "ON" : "OFF"
+        settings.UserSettings.autoExpand.value ? "ON" : "OFF"
       }</div>`
     );
   } else {
     $indicator
-      .css("background", autoExpandEnabled ? "#4CAF50" : "#f44336")
-      .text(`Auto-expand: ${autoExpandEnabled ? "ON" : "OFF"}`);
+      .css("background", settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336")
+      .text(`Auto-expand: ${settings.UserSettings.autoExpand.value ? "ON" : "OFF"}`);
   }
 
   // Hide indicator after 3 seconds
@@ -2145,793 +2934,7 @@ function addGlobalControls() {
 // Initialize when page loads
 $(document).ready(() => {
   addGlobalControls();
-
-  // Set initial auto-expand state
-  toggleAutoExpand(); // This will show the indicator initially
 });
-if (GM_info === undefined) {
-  var GM_info = { script: { version: "32.50" } };
-}
-
-var search = document.URL.includes("/search/");
-var settings = {
-  UserSettings: {
-    threading: {
-      name: "Threading",
-      description: "Make posts ordered by replies below each other",
-      type: "checkbox",
-      value: true,
-    },
-    fetching: {
-      name: "Fetching Searches",
-      description: "On every search post get its mentions fromn fetches",
-      type: "checkbox",
-      value: true,
-    },
-    inlineImages: {
-      name: "Inline Images",
-      description:
-        "Load full-size images in the thread, enable click to expand",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        inlineVideos: {
-          name: "Inline Videos",
-          description:
-            "Replace thumbnails of natively posted videos with the videos themselves",
-          type: "checkbox",
-          value: true,
-          suboptions: {
-            firefoxCompatibility: {
-              name: "Firefox Compatibility Mode",
-              description:
-                "Turn this on to allow you to use the controls on an expanded video without collapsing it",
-              type: "checkbox",
-              value: false,
-            },
-          },
-        },
-        delayedLoad: {
-          name: "Delayed Load",
-          description:
-            "Fullsize images are not automatically retrieved and used to replace the thumbnails. Instead this occurs on an individual basis when the thumbnails are clicked on",
-          type: "checkbox",
-          value: false,
-        },
-        imageHover: {
-          name: "Image Hover",
-          description:
-            "Hovering over images with the mouse brings a full or window scaled version in view",
-          type: "checkbox",
-          value: true,
-        },
-        videoHover: {
-          name: "Video Hover",
-          description:
-            "Hovering over videos with the mouse brings a full or window scaled version in view",
-          type: "checkbox",
-          value: true,
-        },
-        autoplayGifs: {
-          name: "Autoplay embedded gifs",
-          description: "Make embedded gifs play automatically",
-          type: "checkbox",
-          value: true,
-        },
-        autoplayVids: {
-          name: "Autoplay embedded videos",
-          description:
-            "Make embedded videos play automatically (they start muted, expanding unmutes)",
-          type: "checkbox",
-          value: false,
-        },
-        customSize: {
-          name: "Custom thumbnail size",
-          description: "Specify the thumbnail dimensions",
-          type: "checkbox",
-          value: false,
-          suboptions: {
-            widthOP: {
-              name: "OP image width",
-              description: "The maximum width of OP images in pixels",
-              type: "number",
-              value: 250,
-            },
-            heightOP: {
-              name: "OP image height",
-              description: "The maximum height of OP images in pixels",
-              type: "number",
-              value: 250,
-            },
-            width: {
-              name: "Post image width",
-              description: "The maximum width of post images in pixels",
-              type: "number",
-              value: 125,
-            },
-            height: {
-              name: "Post image height",
-              description: "The maximum height of post images in pixels",
-              type: "number",
-              value: 125,
-            },
-          },
-        },
-        processSpoiler: {
-          name: "Process spoilered images",
-          description: "Make native spoilered images inline",
-          type: "checkbox",
-          value: true,
-        },
-      },
-    },
-    embedImages: {
-      name: "Embed Media",
-      description: "Embed image (and other media) links in thread",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        embedVideos: {
-          name: "Embed Videos",
-          description: "Embed video links in thread",
-          type: "checkbox",
-          value: true,
-        },
-        imgNumMaster: {
-          name: "Embed Count",
-          description:
-            "The maximum number of images (or other media) to embed in each post",
-          type: "number",
-          value: 1,
-        },
-        titleYoutubeLinks: {
-          name: "Title YouTube links",
-          description:
-            "Fetches the video name and alters the link text accordingly",
-          type: "checkbox",
-          value: true,
-        },
-      },
-    },
-    autoHost: {
-      name: "Automatically Host Images",
-      description:
-        "When post is submitted image links will be automatically reuploaded to Imgur in an effort to avoid having dead 4chan image links",
-      type: "select",
-      value: {
-        value: "Reupload 4chan links",
-        options: [
-          "Don't reupload links",
-          "Reupload 4chan links",
-          "Reupload all links",
-        ],
-      },
-    },
-    embedGalleries: {
-      name: "Embed Galleries",
-      description:
-        "Embed Imgur galleries into a single post for ease of image dumps",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        showDetails: {
-          name: "Show Details",
-          description:
-            "Show the title, image description and view count for embedded Imgur albums",
-          type: "checkbox",
-          value: true,
-        },
-      },
-    },
-    gallery: {
-      name: "Gallery",
-      description:
-        "Pressing G will bring up a view that displays all the images in a thread",
-      type: "checkbox",
-      value: true,
-    },
-    hidePosts: {
-      name: "Hide Posts",
-      description: "Allow user to hide posts manually",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        recursiveHiding: {
-          name: "Recursive Hiding",
-          description: "Hide replies to hidden posts",
-          type: "checkbox",
-          value: true,
-          suboptions: {
-            hideNewPosts: {
-              name: "Hide New Posts",
-              description:
-                "Also hide replies to hidden posts that are fetched after page load",
-              type: "checkbox",
-              value: true,
-            },
-          },
-        },
-      },
-    },
-    newPosts: {
-      name: "New Posts",
-      description: "Reflect the number of new posts in the tab name",
-      type: "checkbox",
-      value: true,
-    },
-    favicon: {
-      name: "Favicon",
-      description:
-        "Switch to a dynamic favicon that indicates unread posts and unread replies",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        customFavicons: {
-          name: "Custom Favicons",
-          description:
-            "If disabled SpookyX will try its hand at automatically generating suitable favicons for the site. Enabling this allows you to manually specify which favicons it should use instead",
-          type: "checkbox",
-          value: false,
-          suboptions: {
-            unlit: {
-              name: "Unlit",
-              description:
-                'Choose which favicon is used normally. Default is "https://i.imgur.com/xuadeJ2.png"',
-              type: "text",
-              value: "https://i.imgur.com/xuadeJ2.png",
-            },
-            lit: {
-              name: "Lit",
-              description:
-                'Choose which favicon is used to indicate there are unread posts. Preset numbers are 0-4, replace with link to custom image if you desire such as: "https://i.imgur.com/XGsrewo.png"',
-              type: "text",
-              value: "2",
-            },
-            alert: {
-              name: "Alert",
-              description:
-                "The favicon that indicates unread replies to your posts. Value is ignored if using a preset Lit favicon",
-              type: "text",
-              value: "",
-            },
-            alertOverlay: {
-              name: "Alert Overlay",
-              description:
-                'The favicon overlay that indicates unread replies. Default is "https://i.imgur.com/DCXVHHl.png"',
-              type: "text",
-              value: "https://i.imgur.com/DCXVHHl.png",
-            },
-            notification: {
-              name: "Notification image",
-              description:
-                'The image that is displayed in SpookyX generated notifications. 64px square is ideal. Default is "https://i.imgur.com/HTcKk4Y.png"',
-              type: "text",
-              value: "https://i.imgur.com/HTcKk4Y.png",
-            },
-          },
-        },
-      },
-    },
-    labelYourPosts: {
-      name: "Label Your Posts",
-      description: "Add '(You)' to your posts and links that point to them",
-      type: "checkbox",
-      value: true,
-    },
-    inlineReplies: {
-      name: "Inline Replies",
-      description: "Click replies to expand them inline",
-      type: "checkbox",
-      value: true,
-    },
-    notifications: {
-      name: "Enable notifications",
-      description:
-        "Browser notifications will be enabled, for example to alert you when your post has been replied to or if you encountered a posting error",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        spoiler: {
-          name: "Hide spoilers",
-          description:
-            "When creating a notification to alert you of a reply the spoilered text will be replaced with black boxes since nofications cannot hide them like normal",
-          type: "checkbox",
-          value: true,
-        },
-        restrict: {
-          name: "Restrict size",
-          description:
-            "Firefox option only. By default there is no size limit on Firefox notifications, use this option to keep notifications at a sensible size",
-          type: "checkbox",
-          value: false,
-          suboptions: {
-            lines: {
-              name: "Line count",
-              description: "Number of lines the notification is restricted to",
-              type: "number",
-              value: 5,
-            },
-            characters: {
-              name: "Character count",
-              description:
-                "Number of characters per line the notification is restricted to",
-              type: "number",
-              value: 50,
-            },
-          },
-        },
-      },
-    },
-    relativeTimestamps: {
-      name: "Relative Timestamps",
-      description: "Timestamps will be replaced by elapsed time since post",
-      type: "checkbox",
-      value: false,
-    },
-    postQuote: {
-      name: "Post Quote",
-      description:
-        "Clicking the post number will insert highlighted text into the reply box",
-      type: "checkbox",
-      value: true,
-    },
-    revealSpoilers: {
-      name: "Reveal Spoilers",
-      description:
-        "Spoilered text will be displayed without needing to hover over it",
-      type: "checkbox",
-      value: false,
-    },
-    filter: {
-      name: "Filter",
-      description: "Hide undesirable posts from view",
-      type: "checkbox",
-      value: false,
-      suboptions: {
-        filterNotifications: {
-          name: "Filter Notifications",
-          description:
-            "Enabling this will stop creating reply notifications if the reply is filtered with hide or remove mode. Purge mode filtered replies will never create notifications",
-          type: "checkbox",
-          value: true,
-        },
-        recursiveFiltering: {
-          name: "Recursive Filtering",
-          description:
-            "Posts that reply to filtered posts will also be filtered",
-          type: "checkbox",
-          value: false,
-        },
-      },
-    },
-    adjustReplybox: {
-      name: "Adjust Replybox",
-      description: "Change the layout of the reply box",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        width: {
-          name: "Width",
-          description: "Specify the default width of the reply field in pixels",
-          type: "number",
-          value: 600,
-        },
-        hideQROptions: {
-          name: "Hide QR Options",
-          description:
-            "Make the reply options hidden by default in the quick reply",
-          type: "checkbox",
-          value: true,
-        },
-        removeReset: {
-          name: "Remove Reset",
-          description:
-            "Remove the reset button from the reply box to prevent unwanted usage",
-          type: "checkbox",
-          value: false,
-        },
-      },
-    },
-    postCounter: {
-      name: "Post Counter",
-      description: "Add a post counter to the reply box",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        location: {
-          name: "Location",
-          description: "Specify where the post counter is placed",
-          type: "select",
-          value: { value: "Header bar", options: ["Header bar", "Reply box"] },
-        },
-        limits: {
-          name: "Show count limits",
-          description: "Adds count denominators, purely aesthetic",
-          type: "checkbox",
-          value: false,
-          suboptions: {
-            posts: {
-              name: "Posts",
-              description: "Specify the posts counter denominator",
-              type: "number",
-              value: 400,
-            },
-            images: {
-              name: "Images",
-              description: "Specify the images counter denominator",
-              type: "number",
-              value: 250,
-            },
-          },
-        },
-        countUnloaded: {
-          name: "Count unloaded posts",
-          description:
-            "If only viewing the last x posts in a thread use this setting for the post counter to count the total number of posts rather than just the number of posts that have been loaded",
-          type: "checkbox",
-          value: true,
-        },
-        countHidden: {
-          name: "Count hidden posts",
-          description:
-            "Adds a counter that displays how many posts of the total count are hidden",
-          type: "checkbox",
-          value: true,
-          suboptions: {
-            hideNullHiddenCounter: {
-              name: "Auto-hide null hidden counter",
-              description:
-                "If there are no hidden posts the post counter will not display the hidden counter",
-              type: "checkbox",
-              value: true,
-            },
-          },
-        },
-      },
-    },
-    mascot: {
-      name: "Mascot",
-      description:
-        "Place your favourite mascot on the background to keep you company!",
-      type: "checkbox",
-      value: false,
-      suboptions: {
-        mascotImage: {
-          name: "Mascot image",
-          description:
-            "Specify a link to your custom mascot or leave blank for SpookyX defaults",
-          type: "text",
-          value: "",
-        },
-        corner: {
-          name: "Corner",
-          description: "Specify which corner to align the mascot to",
-          type: "select",
-          value: {
-            value: "Bottom Right",
-            options: ["Top Right", "Bottom Right", "Bottom Left", "Top Left"],
-          },
-        },
-        zindex: {
-          name: "Z-index",
-          description:
-            "Determine what page elements the mascot is in front and behind of. Default value is -1",
-          type: "number",
-          value: -1,
-        },
-        opacity: {
-          name: "Opacity",
-          description: "Specify the opacity of the mascot, ranges from 0 to 1",
-          type: "number",
-          value: 1,
-        },
-        clickthrough: {
-          name: "Click-through",
-          description:
-            "Allow you to click through the mascot if it is on top of buttons, etc",
-          type: "checkbox",
-          value: true,
-        },
-        width: {
-          name: "Width",
-          description:
-            "Specify the width of the mascot in pixels. Use a negative number to leave it as the image's default width",
-          type: "number",
-          value: -1,
-        },
-        x: {
-          name: "Horizontal Displacement",
-          description:
-            "Specify horizontal displacement of the mascot in pixels",
-          type: "number",
-          value: 0,
-        },
-        y: {
-          name: "Vertical Displacement",
-          description: "Specify vertical displacement of the mascot in pixels",
-          type: "number",
-          value: 0,
-        },
-        mute: {
-          name: "Mute videos",
-          description: "If using a video for a mascot the sound will be muted",
-          type: "checkbox",
-          value: true,
-        },
-      },
-    },
-    postFlow: {
-      name: "Adjust post flow",
-      description: "Change the way posts are laid out in the page",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        leftMargin: {
-          name: "Left margin",
-          description:
-            "Specify the width in pixels of the gap between the start of the posts and the left side of the screen. Negative values set it to equal the mascot width",
-          type: "number",
-          value: 0,
-        },
-        rightMargin: {
-          name: "Right margin",
-          description:
-            "Specify the width in pixels of the gap between the end of the posts and the right side of the screen. Negative values set it to equal the mascot width",
-          type: "number",
-          value: 0,
-        },
-        align: {
-          name: "Align",
-          description: "Specify how posts are aligned",
-          type: "select",
-          value: { value: "Left", options: ["Left", "Center", "Right"] },
-        },
-        wordBreak: {
-          name: "Word-break",
-          description:
-            "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
-          type: "select",
-          value: {
-            value: "Auto",
-            options: ["Auto", "Break-all", "Normal", "Overflow-Wrap"],
-          },
-        },
-      },
-    },
-    headerBar: {
-      name: "Adjust Headerbar behaviour",
-      description: "Determine whether the headerbar hides and how it does so",
-      type: "checkbox",
-      value: true,
-      suboptions: {
-        behaviour: {
-          name: "Behaviour",
-          description:
-            "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
-          type: "select",
-          value: {
-            value: "Collapse to button",
-            options: ["Always show", "Full hide", "Collapse to button"],
-          },
-          suboptions: {
-            scroll: {
-              name: "Hide on scroll",
-              description:
-                "Scrolling up will show the headerbar, scrolling down will hide it again",
-              if: ["Full hide", "Collapse to button"],
-              type: "checkbox",
-              value: false,
-            },
-            defaultHidden: {
-              name: "Default state hidden",
-              description:
-                "Check to make the headerbar hidden or collapsed by default on pageload",
-              if: ["Full hide", "Collapse to button"],
-              type: "checkbox",
-              value: true,
-            },
-            contractedForm: {
-              name: "Customise contracted form",
-              description:
-                "Specify what the contracted headerbar form contains",
-              if: ["Collapse to button"],
-              type: "checkbox",
-              value: true,
-              suboptions: {
-                settings: {
-                  name: "Settings button",
-                  description:
-                    "Display the settings button in contracted headerbar",
-                  type: "checkbox",
-                  value: false,
-                },
-                postCounter: {
-                  name: "Post counter",
-                  description:
-                    "Display the post counter stats in contracted headerbar",
-                  type: "checkbox",
-                  value: true,
-                },
-              },
-            },
-          },
-        },
-        shortcut: {
-          name: "Hide shortcut",
-          description: "Pressing H will toggle the visiblity of the headerbar",
-          type: "checkbox",
-          value: true,
-        },
-      },
-    },
-    removeJfont: {
-      name: "Remove Japanese Font",
-      description:
-        "Enabling this will make the addition of japanese characters to a post cease to change the post font and size. Presumably will cause issues for people whose default font doesn't support japanese characters",
-      type: "checkbox",
-      value: false,
-    },
-    labelDeletions: {
-      name: "Label Deletions",
-      description:
-        "Enabling this will add 'Deleted' to all trashcan icons that designate deleted posts to allow for easier searching",
-      type: "checkbox",
-      value: false,
-    },
-  },
-  FilterSettings: {
-    name: {
-      name: "Name",
-      value: [{ comment: "#/久保島のミズゴロウ/;" }],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".post_author").html();
-      },
-      responseObjFunction: function (response) {
-        return response["name_processed"];
-      },
-    },
-    tripcode: {
-      name: "Tripcode",
-      value: [
-        { comment: "#/!!/90sanF9F3Z/;" },
-        { comment: "#/!!T2TCnNZDvZu/;" },
-      ],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".post_tripcode").html();
-      },
-      responseObjFunction: function (response) {
-        return response["trip_processed"];
-      },
-    },
-    uniqueID: {
-      name: "Unique ID",
-      value: [
-        { comment: "# Remember to escape any special characters" },
-        { comment: "# For example these are valid:" },
-        { comment: "#/bUAl\\+t9X/;" },
-        { comment: "#/ID:bUAl\\+t9X/;" },
-        { comment: "# But this fails:" },
-        { comment: "#/bUAl+t9X/; " },
-        {
-          comment:
-            "# It's also worth noting that prefixing it with 'ID:' can cause the filter to fail to accurately detect when using recursive filtering. To assure it works fully stick to just using the hash like 'bUAl+t9X'",
-        },
-      ],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".poster_hash").html();
-      },
-      responseObjFunction: function (response) {
-        return response["poster_hash_processed"];
-      },
-    },
-    capcode: {
-      name: "Capcode",
-      value: [
-        { comment: "# Set a custom class for mods:" },
-        { comment: "#/Mod$/;highlight:mod;" },
-        { comment: "# Set a custom class for moot:" },
-        { comment: "#/Admin$/;highlight:moot;" },
-        { comment: "# (highlighting isn't implemented yet)" },
-        {
-          comment:
-            "# For recursive filter to always work you will need to add regex lines for M, A & D for Moderators, Admins and Developers respectively",
-        },
-        {
-          comment:
-            "# e.g. /A/; will filter Admins accurately always whilst /Admin/; won't always work for recursively filtered posts",
-        },
-      ],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".post_level").html();
-      },
-      responseObjFunction: function (response) {
-        return response["capcode"];
-      },
-    },
-    subject: {
-      name: "Subject",
-      value: [{ comment: "#/(^|[^A-z])quest([^A-z]|$)/i;boards:tg;" }],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".post_title").html();
-      },
-      responseObjFunction: function (response) {
-        return response["title_processed"];
-      },
-    },
-    comment: {
-      name: "Comment",
-      value: [{ comment: "#/daki[\\\\S]*/i; boards:tg;" }],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".text").html();
-      },
-      responseObjFunction: function (response) {
-        return response["comment"];
-      },
-    },
-    flag: {
-      name: "Flag",
-      value: [
-        { comment: "#Remove kebob" },
-        { comment: "#/turkey/i;mode:remove;" },
-      ],
-      threadPostFunction: function (currentPost) {
-        return $(currentPost).find(".flag").attr("title");
-      },
-      responseObjFunction: function (response) {
-        return response["poster_country_name_processed"];
-      },
-    },
-    filename: {
-      name: "Filename",
-      value: [],
-      threadPostFunction: function (currentPost) {
-        var combined = "";
-        if ($(currentPost).hasClass("thread")) {
-          combined = $(currentPost).find(".post_file_filename").html();
-        } else {
-          $.each($(currentPost).find(".post_file_filename"), function () {
-            combined += this.innerHTML;
-          });
-        }
-        return combined;
-      },
-      responseObjFunction: function (response) {
-        if (response["media"] === null || response["media"] === undefined) {
-          return "";
-        }
-        return response["media"]["media_filename_processed"];
-      },
-    },
-    fileurl: {
-      name: "File URL",
-      value: [
-        { comment: "# Filter by site for example:" },
-        { comment: "#/tumblr/;" },
-      ],
-      threadPostFunction: function (currentPost) {
-        var combined = "";
-        var $currentPost = $(currentPost);
-        if ($currentPost.hasClass("thread")) {
-          var $currentPostFilename = $currentPost.find(".post_file_filename");
-          if ($currentPostFilename.length) {
-            combined = $currentPostFilename[0].href;
-          }
-        } else {
-          $.each($currentPost.find(".post_file_filename"), function () {
-            combined += this.href;
-          });
-        }
-        return combined;
-      },
-      responseObjFunction: function (response) {
-        if (response["media"] === null || response["media"] === undefined) {
-          return "";
-        }
-        return response["media"]["remote_media_link"];
-      },
-    },
-  },
-};
 
 var defaultSettings = jQuery.extend(true, {}, settings);
 
@@ -8261,6 +8264,6 @@ $(document).ready(function () {
       }
     }
     // Call the async function to start processing posts
-    processPosts();
+    processPosts()
   }
 });
