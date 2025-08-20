@@ -1209,25 +1209,51 @@ const delay = (ms) => {
 function createPostElement(data) {
   const postElement = document.createElement("article");
   postElement.classList.add("post", "expanded-post");
+  
+  // Add doc_id class if available
+  if (data.doc_id) {
+    postElement.classList.add(`doc_id_${data.doc_id}`);
+  }
+  
+  // Add "base" class for main posts (not inline)
+  postElement.classList.add("base");
+  
   postElement.id = "r" + (data.num || data.no || "0");
-
+  
   let boardName = "unknown";
   if (data.board) {
-    if (
-      typeof data.board === "object" &&
-      data.board !== null &&
-      data.board.shortname
-    ) {
+    if (typeof data.board === "object" && data.board !== null && data.board.shortname) {
       boardName = data.board.shortname;
     } else if (typeof data.board === "string") {
       boardName = data.board;
     }
   }
+  
   postElement.setAttribute("data-board", boardName);
+  if (data.doc_id) {
+    postElement.setAttribute("data-doc-id", data.doc_id);
+  }
 
   if (data.media) {
     postElement.classList.add("has_image");
   }
+
+  // Add the pull-left toggle button (like desuarchive)
+  const pullLeft = document.createElement("div");
+  pullLeft.classList.add("pull-left");
+  pullLeft.style.float = "left";
+  
+  const toggleButton = document.createElement("button");
+  toggleButton.classList.add("btn-toggle-post");
+  toggleButton.setAttribute("data-function", "hidePost");
+  toggleButton.setAttribute("data-board", boardName);
+  if (data.doc_id) {
+    toggleButton.setAttribute("data-doc-id", data.doc_id);
+  }
+  toggleButton.innerHTML = '<i class="icon-minus"></i>';
+  
+  pullLeft.appendChild(toggleButton);
+  postElement.appendChild(pullLeft);
 
   // Create post wrapper
   const postWrapper = document.createElement("div");
@@ -1254,18 +1280,12 @@ function createPostElement(data) {
                 <a href="#" class="btnr parent">ImgOps</a>
                 <a href="#" class="btnr parent">iqdb</a>
                 <a href="#" class="btnr parent">SauceNAO</a>
-                <a href="${
-                  data.media.media_link
-                }" download="${filename}" class="btnr parent">
+                <a href="${data.media.media_link}" download="${filename}" class="btnr parent">
                     <i class="icon-download-alt"></i>
                 </a>
             </span>
-            <a href="${
-              data.media.media_link
-            }" class="post_file_filename" title="${filename}">${filename}</a>,
-            <span class="post_file_metadata">${filesize}${
-      dimensions ? ", " + dimensions : ""
-    }</span>
+            <a href="${data.media.media_link}" class="post_file_filename" title="${filename}">${filename}</a>,
+            <span class="post_file_metadata">${filesize}${dimensions ? ", " + dimensions : ""}</span>
         `;
 
     postWrapper.appendChild(postFile);
@@ -1285,7 +1305,6 @@ function createPostElement(data) {
     imageElement.classList.add("post_image");
     imageElement.loading = "lazy";
 
-    // Add dimensions if available
     if (data.media.media_w && data.media.media_h) {
       const maxWidth = Math.min(data.media.media_w, 250);
       const maxHeight = Math.min(data.media.media_h, 250);
@@ -1308,7 +1327,7 @@ function createPostElement(data) {
   const postData = document.createElement("div");
   postData.classList.add("post_data");
 
-  // Mobile controls dropdown (simplified)
+  // Mobile controls dropdown
   const mobileControls = document.createElement("div");
   mobileControls.classList.add("post_mobile_controls_collapse", "dropdown");
   mobileControls.innerHTML = `
@@ -1317,18 +1336,16 @@ function createPostElement(data) {
         </button>
         <ul class="dropdown-menu" role="menu">
             <li class="nav-header">Post</li>
-            <li><a href="#" data-function="report">Report</a></li>
+            <li><a href="#" data-post="${data.doc_id || ''}" data-post-id="${data.num || data.no}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a></li>
         </ul>
     `;
   postData.appendChild(mobileControls);
 
-  // Board indicator
-  if (data.board) {
-    const boardSpan = document.createElement("span");
-    boardSpan.classList.add("post_show_board");
-    boardSpan.textContent = `/${boardName}/`;
-    postData.appendChild(boardSpan);
-  }
+  // Board indicator (show board like /int/)
+  const boardSpan = document.createElement("span");
+  boardSpan.classList.add("post_show_board");
+  boardSpan.textContent = `/${boardName}/`;
+  postData.appendChild(boardSpan);
 
   // Title (usually empty)
   const title = document.createElement("h2");
@@ -1363,27 +1380,11 @@ function createPostElement(data) {
 
     if (!isNaN(date.getTime())) {
       timeElement.setAttribute("datetime", date.toISOString());
-      timeElement.setAttribute(
-        "title",
-        `4chan Time: ${date.toLocaleDateString()}`
-      );
+      timeElement.setAttribute("title", `4chan Time: ${data.fourchan_date || date.toLocaleDateString()}`);
 
-      // Format: "Tue 12 Aug 2025 15:52:47"
+      // Format: "Wed 16 Jul 2025 04:51:37"
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
       const dayName = days[date.getDay()];
       const day = date.getDate().toString().padStart(2, "0");
@@ -1402,10 +1403,11 @@ function createPostElement(data) {
 
   // Post number links
   const postNum = data.num || data.no;
-  const postLink1 = document.createElement("a");
   const domain = document.URL.split("/")[2];
   const http = document.URL.split("/")[0];
-  const url = `${http}://${domain}/${data.board}/post/${postNum}`;
+  const url = `${http}://${domain}/${boardName}/thread/${data.thread_num || postNum}/#${postNum}`;
+  
+  const postLink1 = document.createElement("a");
   postLink1.href = url;
   postLink1.setAttribute("data-post", postNum);
   postLink1.setAttribute("data-function", "highlight");
@@ -1414,7 +1416,7 @@ function createPostElement(data) {
   postData.appendChild(postLink1);
 
   const postLink2 = document.createElement("a");
-  postLink2.href = `#q${postNum}`;
+  postLink2.href = `${http}://${domain}/${boardName}/thread/${data.thread_num || postNum}/#q${postNum}`;
   postLink2.setAttribute("data-post", postNum);
   postLink2.setAttribute("data-function", "quote");
   postLink2.setAttribute("title", "Reply to this post");
@@ -1424,39 +1426,54 @@ function createPostElement(data) {
   // Post type (flags, etc.)
   const postType = document.createElement("span");
   postType.classList.add("post_type");
+  
+  // Add country flag exactly like desuarchive
+  if (data.poster_country) {
+    const countryCode = data.poster_country.toLowerCase(); // "br"
+    const countryName = data.poster_country_name || data.poster_country_name_processed || data.poster_country.toUpperCase();
+    
+    const countryFlag = document.createElement("span");
+    countryFlag.title = countryName; // "Brazil"
+    countryFlag.classList.add("flag", `flag-${countryCode}`); // "flag flag-br"
+    
+    postType.appendChild(countryFlag);
+  }
+  
   postData.appendChild(postType);
 
   // Mobile view
   const mobileView = document.createElement("span");
   mobileView.classList.add("mobile_view");
+  mobileView.innerHTML = `<a href="${url}" class="btnr parent">View</a>`;
   postData.appendChild(mobileView);
+
+  // Mobile bulk
+  const mobileBulk = document.createElement("span");
+  mobileBulk.classList.add("mobile_bulk");
+  postData.appendChild(mobileBulk);
 
   // Post controls
   const postControls = document.createElement("span");
   postControls.classList.add("post_controls");
   postControls.innerHTML = `
         <a href="${url}" class="btnr parent">View</a>
-        <a href="#" class="btnr parent" data-function="report">Report</a>
+        <a href="#" class="btnr parent" data-post="${data.doc_id || ''}" data-post-id="${postNum}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a>
     `;
   postData.appendChild(postControls);
 
   header.appendChild(postData);
   postWrapper.appendChild(header);
 
-  // Backlink list placeholder
+  // Backlink list
   const backlinkList = document.createElement("div");
   backlinkList.classList.add("backlink_list");
-  backlinkList.innerHTML =
-    'Quoted By: <span class="post_backlink" data-post="' +
-    postNum +
-    '"></span>';
+  backlinkList.innerHTML = `Quoted By: <span class="post_backlink" data-post="${postNum}"></span>`;
   postWrapper.appendChild(backlinkList);
 
   // Post content
   const textDiv = document.createElement("div");
   textDiv.classList.add("text");
-  const content =
-    data.comment_processed || data.com || data.comment || data.content || "";
+  const content = data.comment_processed || data.com || data.comment || data.content || "";
   textDiv.innerHTML = content;
   postWrapper.appendChild(textDiv);
 
