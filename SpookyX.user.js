@@ -1063,8 +1063,7 @@ findPenultimateRoot(postId) {
     console.log(`Penultimate root for post ${postId}: ${penultimate}`);
     return penultimate;
 }
-// Modified BFS that starts from a specific post, with OP shown separately
-getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
+getReplyChainFromPostFocused(startPostId, includeOP = true, maxPosts = 50) {
   const result = [];
   const visited = new Set();
   const levelMap = new Map();
@@ -1269,6 +1268,186 @@ getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
   result.forEach(post => {
       console.log(`${post.id} L${post.level}: ${post.quotedParentCount > 0 ? `quotes [${post.quotedParents.join(', ')}]` : 'no quotes'}`);
   });
+  
+  return result;
+}
+getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
+  const result = [];
+  const visited = new Set();
+  const levelMap = new Map(); // Track computed levels for each post
+  
+  // Step 1: Add OP if requested
+  let opId = null;
+  if (includeOP) {
+      opId = this.findOP(startPostId);
+      const opNode = this.nodes.get(opId);
+      
+      if (opNode) {
+          result.push({
+              id: opId,
+              level: 0,
+              data: opNode.data,
+              replies: Array.from(opNode.replies),
+              parents: Array.from(opNode.parents),
+              parentCount: opNode.parents.size,
+              isOP: true
+          });
+          visited.add(opId);
+          levelMap.set(opId, 0);
+      }
+  }
+  
+  // Helper function to calculate proper level based on parents
+  const calculateLevel = (postId, defaultLevel) => {
+      if (levelMap.has(postId)) {
+          return levelMap.get(postId);
+      }
+      
+      const node = this.nodes.get(postId);
+      if (!node) return defaultLevel;
+      
+      // If no parents, it's a root (but not OP since we handle OP separately)
+      if (node.parents.size === 0) {
+          const level = postId === opId ? 0 : 1;
+          levelMap.set(postId, level);
+          return level;
+      }
+      
+      // Calculate level based on parent levels
+      let maxParentLevel = -1;
+      let parentsInResult = 0;
+      
+      for (const parentId of node.parents) {
+          if (levelMap.has(parentId)) {
+              maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
+              parentsInResult++;
+          }
+      }
+      
+      // If we have parent levels, use max parent level + 1
+      if (maxParentLevel >= 0) {
+          const level = maxParentLevel + 1;
+          levelMap.set(postId, level);
+          return level;
+      }
+      
+      // Fallback to default level if parents not processed yet
+      return defaultLevel;
+  };
+  
+  // Step 2: Multi-pass BFS to handle complex parent relationships
+  const queue = [{ id: startPostId, level: includeOP && startPostId !== opId ? 1 : 0 }];
+  let addedPosts = 0;
+  let passes = 0;
+  const maxPasses = 3; // Allow multiple passes to resolve complex dependencies
+  
+  while (passes < maxPasses && addedPosts < maxPosts) {
+      const currentQueue = [...queue];
+      queue.length = 0; // Clear queue for next pass
+      let addedInThisPass = 0;
+      
+      while (currentQueue.length > 0 && addedPosts < maxPosts) {
+          const { id, level } = currentQueue.shift();
+          
+          if (visited.has(id)) continue;
+          
+          const node = this.nodes.get(id);
+          if (!node) continue;
+          
+          // Calculate proper level considering all parents
+          const properLevel = calculateLevel(id, level);
+          
+          // Check if all parents have been processed (for accurate level calculation)
+          const allParentsProcessed = Array.from(node.parents).every(pid => 
+              levelMap.has(pid) || !this.nodes.has(pid)
+          );
+          
+          // If not all parents processed, defer to next pass
+          if (node.parents.size > 0 && !allParentsProcessed && passes < maxPasses - 1) {
+              queue.push({ id, level: properLevel });
+              continue;
+          }
+          
+          visited.add(id);
+          levelMap.set(id, properLevel);
+          
+          // Get actual quoted parents from the post content
+          const actualQuotedParents = extractParentIds(node.data?.comment || node.data?.com || "");
+          const validQuotedParents = actualQuotedParents.filter(pid => this.nodes.has(pid));
+          
+          result.push({
+              id: id,
+              level: properLevel,
+              data: node.data,
+              replies: Array.from(node.replies),
+              parents: Array.from(node.parents), // Graph parents
+              quotedParents: validQuotedParents, // Actual quoted parents
+              parentCount: node.parents.size,
+              quotedParentCount: validQuotedParents.length,
+              isOP: id === opId
+          });
+          
+          addedPosts++;
+          addedInThisPass++;
+          
+          // Add replies to queue for next iteration
+          const sortedReplies = Array.from(node.replies)
+              .filter(replyId => !visited.has(replyId))
+              .sort((a, b) => parseInt(a) - parseInt(b));
+          
+          for (const replyId of sortedReplies) {
+              // Calculate expected level for reply
+              const expectedReplyLevel = properLevel + 1;
+              queue.push({ id: replyId, level: expectedReplyLevel });
+          }
+      }
+      
+      passes++;
+      console.log(`Pass ${passes}: Added ${addedInThisPass} posts, ${queue.length} remaining`);
+      
+      // If no progress in this pass, break to avoid infinite loop
+      if (addedInThisPass === 0 && queue.length > 0) {
+          console.warn(`No progress in pass ${passes}, processing remaining ${queue.length} posts with default levels`);
+          // Process remaining posts with their default levels
+          while (queue.length > 0 && addedPosts < maxPosts) {
+              const { id, level } = queue.shift();
+              if (visited.has(id)) continue;
+              
+              const node = this.nodes.get(id);
+              if (!node) continue;
+              
+              visited.add(id);
+              const actualQuotedParents = extractParentIds(node.data?.comment || node.data?.com || "");
+              const validQuotedParents = actualQuotedParents.filter(pid => this.nodes.has(pid));
+              
+              result.push({
+                  id: id,
+                  level: level,
+                  data: node.data,
+                  replies: Array.from(node.replies),
+                  parents: Array.from(node.parents),
+                  quotedParents: validQuotedParents,
+                  parentCount: node.parents.size,
+                  quotedParentCount: validQuotedParents.length,
+                  isOP: id === opId
+              });
+              addedPosts++;
+          }
+          break;
+      }
+  }
+  
+  // Sort result by level, then by post ID to maintain proper order
+  result.sort((a, b) => {
+      if (a.level !== b.level) return a.level - b.level;
+      return parseInt(a.id) - parseInt(b.id);
+  });
+  
+  console.log(`Reply chain from ${startPostId}: ${result.length} posts (${addedPosts} replies + ${includeOP ? 1 : 0} OP) in ${passes} passes`);
+  console.log('Level distribution:', result.reduce((acc, post) => {
+      acc[`L${post.level}`] = (acc[`L${post.level}`] || 0) + 1;
+      return acc;
+  }, {}));
   
   return result;
 }
