@@ -2805,19 +2805,7 @@ const processPost = async (post) => {
   try {
     // Use your existing fetchRepliesWithRetry function
     let replies = await fetchRepliesWithRetry(aElem);
-    // Auto-expand if enabled and this is first page load
-    if (
-        settings.UserSettings.autoExpand.value &&
-      !autoExpandProcessed.has(id)
-    ) {
-      autoExpandProcessed.add(id);
-
-      setTimeout(() => {
-        console.log(`Auto-expanding post ${id} with ${replies.length} replies`);
-        expandAllQuotes(post);
-      }, Math.random() * 2000 + 1000);
-    }
-
+   
     if (!replies || replies.length === 0) {
       console.log(`No replies found for post ${id}`);
       addExpandButtonToPost(post);
@@ -8250,6 +8238,12 @@ $(document).ready(function () {
           // Sequentially process each post with a delay
           for (let i = 0; i < totalPosts; i++) {
             await processPost(posts[i]); // Process each post
+            // Auto-expand if enabled and this is first page load
+            if (
+                settings.UserSettings.autoExpand.value
+            ) {
+              await expandAllQuotes(posts[i])
+            }
             await delay(wait); // Delay between each request to avoid too many requests
           }
 
