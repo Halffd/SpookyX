@@ -43,796 +43,795 @@
 // @icon          https://i.imgur.com/LaYyYRl.png
 // ==/UserScript==
 
-
 if (GM_info === undefined) {
-    var GM_info = { script: { version: "32.50" } };
-  }
-  
-  var search = document.URL.includes("/search/");
-  var settings = {
-    UserSettings: {
-      threading: {
-        name: "Threading",
-        description: "Make posts ordered by replies below each other",
-        type: "checkbox",
-        value: true,
-      },
-      fetching: {
-        name: "Fetching Searches",
-        description: "On every search post get its mentions fromn fetches",
-        type: "checkbox",
-        value: true,
-      },
-      autoExpand: {
-        name: "Auto-Expand Searches",
-        description: "On every search post expand chain",
-        type: "checkbox",
-        value: true,
-      },
-      inlineImages: {
-        name: "Inline Images",
-        description:
-          "Load full-size images in the thread, enable click to expand",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          inlineVideos: {
-            name: "Inline Videos",
-            description:
-              "Replace thumbnails of natively posted videos with the videos themselves",
-            type: "checkbox",
-            value: true,
-            suboptions: {
-              firefoxCompatibility: {
-                name: "Firefox Compatibility Mode",
-                description:
-                  "Turn this on to allow you to use the controls on an expanded video without collapsing it",
-                type: "checkbox",
-                value: false,
-              },
-            },
-          },
-          delayedLoad: {
-            name: "Delayed Load",
-            description:
-              "Fullsize images are not automatically retrieved and used to replace the thumbnails. Instead this occurs on an individual basis when the thumbnails are clicked on",
-            type: "checkbox",
-            value: false,
-          },
-          imageHover: {
-            name: "Image Hover",
-            description:
-              "Hovering over images with the mouse brings a full or window scaled version in view",
-            type: "checkbox",
-            value: true,
-          },
-          videoHover: {
-            name: "Video Hover",
-            description:
-              "Hovering over videos with the mouse brings a full or window scaled version in view",
-            type: "checkbox",
-            value: true,
-          },
-          autoplayGifs: {
-            name: "Autoplay embedded gifs",
-            description: "Make embedded gifs play automatically",
-            type: "checkbox",
-            value: true,
-          },
-          autoplayVids: {
-            name: "Autoplay embedded videos",
-            description:
-              "Make embedded videos play automatically (they start muted, expanding unmutes)",
-            type: "checkbox",
-            value: false,
-          },
-          customSize: {
-            name: "Custom thumbnail size",
-            description: "Specify the thumbnail dimensions",
-            type: "checkbox",
-            value: false,
-            suboptions: {
-              widthOP: {
-                name: "OP image width",
-                description: "The maximum width of OP images in pixels",
-                type: "number",
-                value: 250,
-              },
-              heightOP: {
-                name: "OP image height",
-                description: "The maximum height of OP images in pixels",
-                type: "number",
-                value: 250,
-              },
-              width: {
-                name: "Post image width",
-                description: "The maximum width of post images in pixels",
-                type: "number",
-                value: 125,
-              },
-              height: {
-                name: "Post image height",
-                description: "The maximum height of post images in pixels",
-                type: "number",
-                value: 125,
-              },
-            },
-          },
-          processSpoiler: {
-            name: "Process spoilered images",
-            description: "Make native spoilered images inline",
-            type: "checkbox",
-            value: true,
-          },
-        },
-      },
-      embedImages: {
-        name: "Embed Media",
-        description: "Embed image (and other media) links in thread",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          embedVideos: {
-            name: "Embed Videos",
-            description: "Embed video links in thread",
-            type: "checkbox",
-            value: true,
-          },
-          imgNumMaster: {
-            name: "Embed Count",
-            description:
-              "The maximum number of images (or other media) to embed in each post",
-            type: "number",
-            value: 1,
-          },
-          titleYoutubeLinks: {
-            name: "Title YouTube links",
-            description:
-              "Fetches the video name and alters the link text accordingly",
-            type: "checkbox",
-            value: true,
-          },
-        },
-      },
-      autoHost: {
-        name: "Automatically Host Images",
-        description:
-          "When post is submitted image links will be automatically reuploaded to Imgur in an effort to avoid having dead 4chan image links",
-        type: "select",
-        value: {
-          value: "Reupload 4chan links",
-          options: [
-            "Don't reupload links",
-            "Reupload 4chan links",
-            "Reupload all links",
-          ],
-        },
-      },
-      embedGalleries: {
-        name: "Embed Galleries",
-        description:
-          "Embed Imgur galleries into a single post for ease of image dumps",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          showDetails: {
-            name: "Show Details",
-            description:
-              "Show the title, image description and view count for embedded Imgur albums",
-            type: "checkbox",
-            value: true,
-          },
-        },
-      },
-      gallery: {
-        name: "Gallery",
-        description:
-          "Pressing G will bring up a view that displays all the images in a thread",
-        type: "checkbox",
-        value: true,
-      },
-      hidePosts: {
-        name: "Hide Posts",
-        description: "Allow user to hide posts manually",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          recursiveHiding: {
-            name: "Recursive Hiding",
-            description: "Hide replies to hidden posts",
-            type: "checkbox",
-            value: true,
-            suboptions: {
-              hideNewPosts: {
-                name: "Hide New Posts",
-                description:
-                  "Also hide replies to hidden posts that are fetched after page load",
-                type: "checkbox",
-                value: true,
-              },
+  var GM_info = { script: { version: "32.50" } };
+}
+
+var search = document.URL.includes("/search/");
+var settings = {
+  UserSettings: {
+    threading: {
+      name: "Threading",
+      description: "Make posts ordered by replies below each other",
+      type: "checkbox",
+      value: true,
+    },
+    fetching: {
+      name: "Fetching Searches",
+      description: "On every search post get its mentions fromn fetches",
+      type: "checkbox",
+      value: true,
+    },
+    autoExpand: {
+      name: "Auto-Expand Searches",
+      description: "On every search post expand chain",
+      type: "checkbox",
+      value: true,
+    },
+    inlineImages: {
+      name: "Inline Images",
+      description:
+        "Load full-size images in the thread, enable click to expand",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        inlineVideos: {
+          name: "Inline Videos",
+          description:
+            "Replace thumbnails of natively posted videos with the videos themselves",
+          type: "checkbox",
+          value: true,
+          suboptions: {
+            firefoxCompatibility: {
+              name: "Firefox Compatibility Mode",
+              description:
+                "Turn this on to allow you to use the controls on an expanded video without collapsing it",
+              type: "checkbox",
+              value: false,
             },
           },
         },
+        delayedLoad: {
+          name: "Delayed Load",
+          description:
+            "Fullsize images are not automatically retrieved and used to replace the thumbnails. Instead this occurs on an individual basis when the thumbnails are clicked on",
+          type: "checkbox",
+          value: false,
+        },
+        imageHover: {
+          name: "Image Hover",
+          description:
+            "Hovering over images with the mouse brings a full or window scaled version in view",
+          type: "checkbox",
+          value: true,
+        },
+        videoHover: {
+          name: "Video Hover",
+          description:
+            "Hovering over videos with the mouse brings a full or window scaled version in view",
+          type: "checkbox",
+          value: true,
+        },
+        autoplayGifs: {
+          name: "Autoplay embedded gifs",
+          description: "Make embedded gifs play automatically",
+          type: "checkbox",
+          value: true,
+        },
+        autoplayVids: {
+          name: "Autoplay embedded videos",
+          description:
+            "Make embedded videos play automatically (they start muted, expanding unmutes)",
+          type: "checkbox",
+          value: false,
+        },
+        customSize: {
+          name: "Custom thumbnail size",
+          description: "Specify the thumbnail dimensions",
+          type: "checkbox",
+          value: false,
+          suboptions: {
+            widthOP: {
+              name: "OP image width",
+              description: "The maximum width of OP images in pixels",
+              type: "number",
+              value: 250,
+            },
+            heightOP: {
+              name: "OP image height",
+              description: "The maximum height of OP images in pixels",
+              type: "number",
+              value: 250,
+            },
+            width: {
+              name: "Post image width",
+              description: "The maximum width of post images in pixels",
+              type: "number",
+              value: 125,
+            },
+            height: {
+              name: "Post image height",
+              description: "The maximum height of post images in pixels",
+              type: "number",
+              value: 125,
+            },
+          },
+        },
+        processSpoiler: {
+          name: "Process spoilered images",
+          description: "Make native spoilered images inline",
+          type: "checkbox",
+          value: true,
+        },
       },
-      newPosts: {
-        name: "New Posts",
-        description: "Reflect the number of new posts in the tab name",
-        type: "checkbox",
-        value: true,
+    },
+    embedImages: {
+      name: "Embed Media",
+      description: "Embed image (and other media) links in thread",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        embedVideos: {
+          name: "Embed Videos",
+          description: "Embed video links in thread",
+          type: "checkbox",
+          value: true,
+        },
+        imgNumMaster: {
+          name: "Embed Count",
+          description:
+            "The maximum number of images (or other media) to embed in each post",
+          type: "number",
+          value: 1,
+        },
+        titleYoutubeLinks: {
+          name: "Title YouTube links",
+          description:
+            "Fetches the video name and alters the link text accordingly",
+          type: "checkbox",
+          value: true,
+        },
       },
-      favicon: {
-        name: "Favicon",
-        description:
-          "Switch to a dynamic favicon that indicates unread posts and unread replies",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          customFavicons: {
-            name: "Custom Favicons",
-            description:
-              "If disabled SpookyX will try its hand at automatically generating suitable favicons for the site. Enabling this allows you to manually specify which favicons it should use instead",
-            type: "checkbox",
-            value: false,
-            suboptions: {
-              unlit: {
-                name: "Unlit",
-                description:
-                  'Choose which favicon is used normally. Default is "https://i.imgur.com/xuadeJ2.png"',
-                type: "text",
-                value: "https://i.imgur.com/xuadeJ2.png",
-              },
-              lit: {
-                name: "Lit",
-                description:
-                  'Choose which favicon is used to indicate there are unread posts. Preset numbers are 0-4, replace with link to custom image if you desire such as: "https://i.imgur.com/XGsrewo.png"',
-                type: "text",
-                value: "2",
-              },
-              alert: {
-                name: "Alert",
-                description:
-                  "The favicon that indicates unread replies to your posts. Value is ignored if using a preset Lit favicon",
-                type: "text",
-                value: "",
-              },
-              alertOverlay: {
-                name: "Alert Overlay",
-                description:
-                  'The favicon overlay that indicates unread replies. Default is "https://i.imgur.com/DCXVHHl.png"',
-                type: "text",
-                value: "https://i.imgur.com/DCXVHHl.png",
-              },
-              notification: {
-                name: "Notification image",
-                description:
-                  'The image that is displayed in SpookyX generated notifications. 64px square is ideal. Default is "https://i.imgur.com/HTcKk4Y.png"',
-                type: "text",
-                value: "https://i.imgur.com/HTcKk4Y.png",
-              },
+    },
+    autoHost: {
+      name: "Automatically Host Images",
+      description:
+        "When post is submitted image links will be automatically reuploaded to Imgur in an effort to avoid having dead 4chan image links",
+      type: "select",
+      value: {
+        value: "Reupload 4chan links",
+        options: [
+          "Don't reupload links",
+          "Reupload 4chan links",
+          "Reupload all links",
+        ],
+      },
+    },
+    embedGalleries: {
+      name: "Embed Galleries",
+      description:
+        "Embed Imgur galleries into a single post for ease of image dumps",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        showDetails: {
+          name: "Show Details",
+          description:
+            "Show the title, image description and view count for embedded Imgur albums",
+          type: "checkbox",
+          value: true,
+        },
+      },
+    },
+    gallery: {
+      name: "Gallery",
+      description:
+        "Pressing G will bring up a view that displays all the images in a thread",
+      type: "checkbox",
+      value: true,
+    },
+    hidePosts: {
+      name: "Hide Posts",
+      description: "Allow user to hide posts manually",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        recursiveHiding: {
+          name: "Recursive Hiding",
+          description: "Hide replies to hidden posts",
+          type: "checkbox",
+          value: true,
+          suboptions: {
+            hideNewPosts: {
+              name: "Hide New Posts",
+              description:
+                "Also hide replies to hidden posts that are fetched after page load",
+              type: "checkbox",
+              value: true,
             },
           },
         },
       },
-      labelYourPosts: {
-        name: "Label Your Posts",
-        description: "Add '(You)' to your posts and links that point to them",
-        type: "checkbox",
-        value: true,
-      },
-      inlineReplies: {
-        name: "Inline Replies",
-        description: "Click replies to expand them inline",
-        type: "checkbox",
-        value: true,
-      },
-      notifications: {
-        name: "Enable notifications",
-        description:
-          "Browser notifications will be enabled, for example to alert you when your post has been replied to or if you encountered a posting error",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          spoiler: {
-            name: "Hide spoilers",
-            description:
-              "When creating a notification to alert you of a reply the spoilered text will be replaced with black boxes since nofications cannot hide them like normal",
-            type: "checkbox",
-            value: true,
-          },
-          restrict: {
-            name: "Restrict size",
-            description:
-              "Firefox option only. By default there is no size limit on Firefox notifications, use this option to keep notifications at a sensible size",
-            type: "checkbox",
-            value: false,
-            suboptions: {
-              lines: {
-                name: "Line count",
-                description: "Number of lines the notification is restricted to",
-                type: "number",
-                value: 5,
-              },
-              characters: {
-                name: "Character count",
-                description:
-                  "Number of characters per line the notification is restricted to",
-                type: "number",
-                value: 50,
-              },
+    },
+    newPosts: {
+      name: "New Posts",
+      description: "Reflect the number of new posts in the tab name",
+      type: "checkbox",
+      value: true,
+    },
+    favicon: {
+      name: "Favicon",
+      description:
+        "Switch to a dynamic favicon that indicates unread posts and unread replies",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        customFavicons: {
+          name: "Custom Favicons",
+          description:
+            "If disabled SpookyX will try its hand at automatically generating suitable favicons for the site. Enabling this allows you to manually specify which favicons it should use instead",
+          type: "checkbox",
+          value: false,
+          suboptions: {
+            unlit: {
+              name: "Unlit",
+              description:
+                'Choose which favicon is used normally. Default is "https://i.imgur.com/xuadeJ2.png"',
+              type: "text",
+              value: "https://i.imgur.com/xuadeJ2.png",
+            },
+            lit: {
+              name: "Lit",
+              description:
+                'Choose which favicon is used to indicate there are unread posts. Preset numbers are 0-4, replace with link to custom image if you desire such as: "https://i.imgur.com/XGsrewo.png"',
+              type: "text",
+              value: "2",
+            },
+            alert: {
+              name: "Alert",
+              description:
+                "The favicon that indicates unread replies to your posts. Value is ignored if using a preset Lit favicon",
+              type: "text",
+              value: "",
+            },
+            alertOverlay: {
+              name: "Alert Overlay",
+              description:
+                'The favicon overlay that indicates unread replies. Default is "https://i.imgur.com/DCXVHHl.png"',
+              type: "text",
+              value: "https://i.imgur.com/DCXVHHl.png",
+            },
+            notification: {
+              name: "Notification image",
+              description:
+                'The image that is displayed in SpookyX generated notifications. 64px square is ideal. Default is "https://i.imgur.com/HTcKk4Y.png"',
+              type: "text",
+              value: "https://i.imgur.com/HTcKk4Y.png",
             },
           },
         },
       },
-      relativeTimestamps: {
-        name: "Relative Timestamps",
-        description: "Timestamps will be replaced by elapsed time since post",
-        type: "checkbox",
-        value: false,
-      },
-      postQuote: {
-        name: "Post Quote",
-        description:
-          "Clicking the post number will insert highlighted text into the reply box",
-        type: "checkbox",
-        value: true,
-      },
-      revealSpoilers: {
-        name: "Reveal Spoilers",
-        description:
-          "Spoilered text will be displayed without needing to hover over it",
-        type: "checkbox",
-        value: false,
-      },
-      filter: {
-        name: "Filter",
-        description: "Hide undesirable posts from view",
-        type: "checkbox",
-        value: false,
-        suboptions: {
-          filterNotifications: {
-            name: "Filter Notifications",
-            description:
-              "Enabling this will stop creating reply notifications if the reply is filtered with hide or remove mode. Purge mode filtered replies will never create notifications",
-            type: "checkbox",
-            value: true,
-          },
-          recursiveFiltering: {
-            name: "Recursive Filtering",
-            description:
-              "Posts that reply to filtered posts will also be filtered",
-            type: "checkbox",
-            value: false,
-          },
+    },
+    labelYourPosts: {
+      name: "Label Your Posts",
+      description: "Add '(You)' to your posts and links that point to them",
+      type: "checkbox",
+      value: true,
+    },
+    inlineReplies: {
+      name: "Inline Replies",
+      description: "Click replies to expand them inline",
+      type: "checkbox",
+      value: true,
+    },
+    notifications: {
+      name: "Enable notifications",
+      description:
+        "Browser notifications will be enabled, for example to alert you when your post has been replied to or if you encountered a posting error",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        spoiler: {
+          name: "Hide spoilers",
+          description:
+            "When creating a notification to alert you of a reply the spoilered text will be replaced with black boxes since nofications cannot hide them like normal",
+          type: "checkbox",
+          value: true,
         },
-      },
-      adjustReplybox: {
-        name: "Adjust Replybox",
-        description: "Change the layout of the reply box",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          width: {
-            name: "Width",
-            description: "Specify the default width of the reply field in pixels",
-            type: "number",
-            value: 600,
-          },
-          hideQROptions: {
-            name: "Hide QR Options",
-            description:
-              "Make the reply options hidden by default in the quick reply",
-            type: "checkbox",
-            value: true,
-          },
-          removeReset: {
-            name: "Remove Reset",
-            description:
-              "Remove the reset button from the reply box to prevent unwanted usage",
-            type: "checkbox",
-            value: false,
-          },
-        },
-      },
-      postCounter: {
-        name: "Post Counter",
-        description: "Add a post counter to the reply box",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          location: {
-            name: "Location",
-            description: "Specify where the post counter is placed",
-            type: "select",
-            value: { value: "Header bar", options: ["Header bar", "Reply box"] },
-          },
-          limits: {
-            name: "Show count limits",
-            description: "Adds count denominators, purely aesthetic",
-            type: "checkbox",
-            value: false,
-            suboptions: {
-              posts: {
-                name: "Posts",
-                description: "Specify the posts counter denominator",
-                type: "number",
-                value: 400,
-              },
-              images: {
-                name: "Images",
-                description: "Specify the images counter denominator",
-                type: "number",
-                value: 250,
-              },
+        restrict: {
+          name: "Restrict size",
+          description:
+            "Firefox option only. By default there is no size limit on Firefox notifications, use this option to keep notifications at a sensible size",
+          type: "checkbox",
+          value: false,
+          suboptions: {
+            lines: {
+              name: "Line count",
+              description: "Number of lines the notification is restricted to",
+              type: "number",
+              value: 5,
             },
-          },
-          countUnloaded: {
-            name: "Count unloaded posts",
-            description:
-              "If only viewing the last x posts in a thread use this setting for the post counter to count the total number of posts rather than just the number of posts that have been loaded",
-            type: "checkbox",
-            value: true,
-          },
-          countHidden: {
-            name: "Count hidden posts",
-            description:
-              "Adds a counter that displays how many posts of the total count are hidden",
-            type: "checkbox",
-            value: true,
-            suboptions: {
-              hideNullHiddenCounter: {
-                name: "Auto-hide null hidden counter",
-                description:
-                  "If there are no hidden posts the post counter will not display the hidden counter",
-                type: "checkbox",
-                value: true,
-              },
+            characters: {
+              name: "Character count",
+              description:
+                "Number of characters per line the notification is restricted to",
+              type: "number",
+              value: 50,
             },
           },
         },
       },
-      mascot: {
-        name: "Mascot",
-        description:
-          "Place your favourite mascot on the background to keep you company!",
-        type: "checkbox",
-        value: false,
-        suboptions: {
-          mascotImage: {
-            name: "Mascot image",
-            description:
-              "Specify a link to your custom mascot or leave blank for SpookyX defaults",
-            type: "text",
-            value: "",
-          },
-          corner: {
-            name: "Corner",
-            description: "Specify which corner to align the mascot to",
-            type: "select",
-            value: {
-              value: "Bottom Right",
-              options: ["Top Right", "Bottom Right", "Bottom Left", "Top Left"],
-            },
-          },
-          zindex: {
-            name: "Z-index",
-            description:
-              "Determine what page elements the mascot is in front and behind of. Default value is -1",
-            type: "number",
-            value: -1,
-          },
-          opacity: {
-            name: "Opacity",
-            description: "Specify the opacity of the mascot, ranges from 0 to 1",
-            type: "number",
-            value: 1,
-          },
-          clickthrough: {
-            name: "Click-through",
-            description:
-              "Allow you to click through the mascot if it is on top of buttons, etc",
-            type: "checkbox",
-            value: true,
-          },
-          width: {
-            name: "Width",
-            description:
-              "Specify the width of the mascot in pixels. Use a negative number to leave it as the image's default width",
-            type: "number",
-            value: -1,
-          },
-          x: {
-            name: "Horizontal Displacement",
-            description:
-              "Specify horizontal displacement of the mascot in pixels",
-            type: "number",
-            value: 0,
-          },
-          y: {
-            name: "Vertical Displacement",
-            description: "Specify vertical displacement of the mascot in pixels",
-            type: "number",
-            value: 0,
-          },
-          mute: {
-            name: "Mute videos",
-            description: "If using a video for a mascot the sound will be muted",
-            type: "checkbox",
-            value: true,
-          },
+    },
+    relativeTimestamps: {
+      name: "Relative Timestamps",
+      description: "Timestamps will be replaced by elapsed time since post",
+      type: "checkbox",
+      value: false,
+    },
+    postQuote: {
+      name: "Post Quote",
+      description:
+        "Clicking the post number will insert highlighted text into the reply box",
+      type: "checkbox",
+      value: true,
+    },
+    revealSpoilers: {
+      name: "Reveal Spoilers",
+      description:
+        "Spoilered text will be displayed without needing to hover over it",
+      type: "checkbox",
+      value: false,
+    },
+    filter: {
+      name: "Filter",
+      description: "Hide undesirable posts from view",
+      type: "checkbox",
+      value: false,
+      suboptions: {
+        filterNotifications: {
+          name: "Filter Notifications",
+          description:
+            "Enabling this will stop creating reply notifications if the reply is filtered with hide or remove mode. Purge mode filtered replies will never create notifications",
+          type: "checkbox",
+          value: true,
+        },
+        recursiveFiltering: {
+          name: "Recursive Filtering",
+          description:
+            "Posts that reply to filtered posts will also be filtered",
+          type: "checkbox",
+          value: false,
         },
       },
-      postFlow: {
-        name: "Adjust post flow",
-        description: "Change the way posts are laid out in the page",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          leftMargin: {
-            name: "Left margin",
-            description:
-              "Specify the width in pixels of the gap between the start of the posts and the left side of the screen. Negative values set it to equal the mascot width",
-            type: "number",
-            value: 0,
-          },
-          rightMargin: {
-            name: "Right margin",
-            description:
-              "Specify the width in pixels of the gap between the end of the posts and the right side of the screen. Negative values set it to equal the mascot width",
-            type: "number",
-            value: 0,
-          },
-          align: {
-            name: "Align",
-            description: "Specify how posts are aligned",
-            type: "select",
-            value: { value: "Left", options: ["Left", "Center", "Right"] },
-          },
-          wordBreak: {
-            name: "Word-break",
-            description:
-              "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
-            type: "select",
-            value: {
-              value: "Auto",
-              options: ["Auto", "Break-all", "Normal", "Overflow-Wrap"],
+    },
+    adjustReplybox: {
+      name: "Adjust Replybox",
+      description: "Change the layout of the reply box",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        width: {
+          name: "Width",
+          description: "Specify the default width of the reply field in pixels",
+          type: "number",
+          value: 600,
+        },
+        hideQROptions: {
+          name: "Hide QR Options",
+          description:
+            "Make the reply options hidden by default in the quick reply",
+          type: "checkbox",
+          value: true,
+        },
+        removeReset: {
+          name: "Remove Reset",
+          description:
+            "Remove the reset button from the reply box to prevent unwanted usage",
+          type: "checkbox",
+          value: false,
+        },
+      },
+    },
+    postCounter: {
+      name: "Post Counter",
+      description: "Add a post counter to the reply box",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        location: {
+          name: "Location",
+          description: "Specify where the post counter is placed",
+          type: "select",
+          value: { value: "Header bar", options: ["Header bar", "Reply box"] },
+        },
+        limits: {
+          name: "Show count limits",
+          description: "Adds count denominators, purely aesthetic",
+          type: "checkbox",
+          value: false,
+          suboptions: {
+            posts: {
+              name: "Posts",
+              description: "Specify the posts counter denominator",
+              type: "number",
+              value: 400,
+            },
+            images: {
+              name: "Images",
+              description: "Specify the images counter denominator",
+              type: "number",
+              value: 250,
             },
           },
         },
-      },
-      headerBar: {
-        name: "Adjust Headerbar behaviour",
-        description: "Determine whether the headerbar hides and how it does so",
-        type: "checkbox",
-        value: true,
-        suboptions: {
-          behaviour: {
-            name: "Behaviour",
-            description:
-              "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
-            type: "select",
-            value: {
-              value: "Collapse to button",
-              options: ["Always show", "Full hide", "Collapse to button"],
+        countUnloaded: {
+          name: "Count unloaded posts",
+          description:
+            "If only viewing the last x posts in a thread use this setting for the post counter to count the total number of posts rather than just the number of posts that have been loaded",
+          type: "checkbox",
+          value: true,
+        },
+        countHidden: {
+          name: "Count hidden posts",
+          description:
+            "Adds a counter that displays how many posts of the total count are hidden",
+          type: "checkbox",
+          value: true,
+          suboptions: {
+            hideNullHiddenCounter: {
+              name: "Auto-hide null hidden counter",
+              description:
+                "If there are no hidden posts the post counter will not display the hidden counter",
+              type: "checkbox",
+              value: true,
             },
-            suboptions: {
-              scroll: {
-                name: "Hide on scroll",
-                description:
-                  "Scrolling up will show the headerbar, scrolling down will hide it again",
-                if: ["Full hide", "Collapse to button"],
-                type: "checkbox",
-                value: false,
-              },
-              defaultHidden: {
-                name: "Default state hidden",
-                description:
-                  "Check to make the headerbar hidden or collapsed by default on pageload",
-                if: ["Full hide", "Collapse to button"],
-                type: "checkbox",
-                value: true,
-              },
-              contractedForm: {
-                name: "Customise contracted form",
-                description:
-                  "Specify what the contracted headerbar form contains",
-                if: ["Collapse to button"],
-                type: "checkbox",
-                value: true,
-                suboptions: {
-                  settings: {
-                    name: "Settings button",
-                    description:
-                      "Display the settings button in contracted headerbar",
-                    type: "checkbox",
-                    value: false,
-                  },
-                  postCounter: {
-                    name: "Post counter",
-                    description:
-                      "Display the post counter stats in contracted headerbar",
-                    type: "checkbox",
-                    value: true,
-                  },
+          },
+        },
+      },
+    },
+    mascot: {
+      name: "Mascot",
+      description:
+        "Place your favourite mascot on the background to keep you company!",
+      type: "checkbox",
+      value: false,
+      suboptions: {
+        mascotImage: {
+          name: "Mascot image",
+          description:
+            "Specify a link to your custom mascot or leave blank for SpookyX defaults",
+          type: "text",
+          value: "",
+        },
+        corner: {
+          name: "Corner",
+          description: "Specify which corner to align the mascot to",
+          type: "select",
+          value: {
+            value: "Bottom Right",
+            options: ["Top Right", "Bottom Right", "Bottom Left", "Top Left"],
+          },
+        },
+        zindex: {
+          name: "Z-index",
+          description:
+            "Determine what page elements the mascot is in front and behind of. Default value is -1",
+          type: "number",
+          value: -1,
+        },
+        opacity: {
+          name: "Opacity",
+          description: "Specify the opacity of the mascot, ranges from 0 to 1",
+          type: "number",
+          value: 1,
+        },
+        clickthrough: {
+          name: "Click-through",
+          description:
+            "Allow you to click through the mascot if it is on top of buttons, etc",
+          type: "checkbox",
+          value: true,
+        },
+        width: {
+          name: "Width",
+          description:
+            "Specify the width of the mascot in pixels. Use a negative number to leave it as the image's default width",
+          type: "number",
+          value: -1,
+        },
+        x: {
+          name: "Horizontal Displacement",
+          description:
+            "Specify horizontal displacement of the mascot in pixels",
+          type: "number",
+          value: 0,
+        },
+        y: {
+          name: "Vertical Displacement",
+          description: "Specify vertical displacement of the mascot in pixels",
+          type: "number",
+          value: 0,
+        },
+        mute: {
+          name: "Mute videos",
+          description: "If using a video for a mascot the sound will be muted",
+          type: "checkbox",
+          value: true,
+        },
+      },
+    },
+    postFlow: {
+      name: "Adjust post flow",
+      description: "Change the way posts are laid out in the page",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        leftMargin: {
+          name: "Left margin",
+          description:
+            "Specify the width in pixels of the gap between the start of the posts and the left side of the screen. Negative values set it to equal the mascot width",
+          type: "number",
+          value: 0,
+        },
+        rightMargin: {
+          name: "Right margin",
+          description:
+            "Specify the width in pixels of the gap between the end of the posts and the right side of the screen. Negative values set it to equal the mascot width",
+          type: "number",
+          value: 0,
+        },
+        align: {
+          name: "Align",
+          description: "Specify how posts are aligned",
+          type: "select",
+          value: { value: "Left", options: ["Left", "Center", "Right"] },
+        },
+        wordBreak: {
+          name: "Word-break",
+          description:
+            "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
+          type: "select",
+          value: {
+            value: "Auto",
+            options: ["Auto", "Break-all", "Normal", "Overflow-Wrap"],
+          },
+        },
+      },
+    },
+    headerBar: {
+      name: "Adjust Headerbar behaviour",
+      description: "Determine whether the headerbar hides and how it does so",
+      type: "checkbox",
+      value: true,
+      suboptions: {
+        behaviour: {
+          name: "Behaviour",
+          description:
+            "Firefox runs into difficulties with breaking really long words, test the options available until you find something that works. On auto this attempts to detect browser and select the most appropriate setting",
+          type: "select",
+          value: {
+            value: "Collapse to button",
+            options: ["Always show", "Full hide", "Collapse to button"],
+          },
+          suboptions: {
+            scroll: {
+              name: "Hide on scroll",
+              description:
+                "Scrolling up will show the headerbar, scrolling down will hide it again",
+              if: ["Full hide", "Collapse to button"],
+              type: "checkbox",
+              value: false,
+            },
+            defaultHidden: {
+              name: "Default state hidden",
+              description:
+                "Check to make the headerbar hidden or collapsed by default on pageload",
+              if: ["Full hide", "Collapse to button"],
+              type: "checkbox",
+              value: true,
+            },
+            contractedForm: {
+              name: "Customise contracted form",
+              description:
+                "Specify what the contracted headerbar form contains",
+              if: ["Collapse to button"],
+              type: "checkbox",
+              value: true,
+              suboptions: {
+                settings: {
+                  name: "Settings button",
+                  description:
+                    "Display the settings button in contracted headerbar",
+                  type: "checkbox",
+                  value: false,
+                },
+                postCounter: {
+                  name: "Post counter",
+                  description:
+                    "Display the post counter stats in contracted headerbar",
+                  type: "checkbox",
+                  value: true,
                 },
               },
             },
           },
-          shortcut: {
-            name: "Hide shortcut",
-            description: "Pressing H will toggle the visiblity of the headerbar",
-            type: "checkbox",
-            value: true,
-          },
         },
-      },
-      removeJfont: {
-        name: "Remove Japanese Font",
-        description:
-          "Enabling this will make the addition of japanese characters to a post cease to change the post font and size. Presumably will cause issues for people whose default font doesn't support japanese characters",
-        type: "checkbox",
-        value: false,
-      },
-      labelDeletions: {
-        name: "Label Deletions",
-        description:
-          "Enabling this will add 'Deleted' to all trashcan icons that designate deleted posts to allow for easier searching",
-        type: "checkbox",
-        value: false,
-      },
-    },
-    FilterSettings: {
-      name: {
-        name: "Name",
-        value: [{ comment: "#/久保島のミズゴロウ/;" }],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".post_author").html();
-        },
-        responseObjFunction: function (response) {
-          return response["name_processed"];
-        },
-      },
-      tripcode: {
-        name: "Tripcode",
-        value: [
-          { comment: "#/!!/90sanF9F3Z/;" },
-          { comment: "#/!!T2TCnNZDvZu/;" },
-        ],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".post_tripcode").html();
-        },
-        responseObjFunction: function (response) {
-          return response["trip_processed"];
-        },
-      },
-      uniqueID: {
-        name: "Unique ID",
-        value: [
-          { comment: "# Remember to escape any special characters" },
-          { comment: "# For example these are valid:" },
-          { comment: "#/bUAl\\+t9X/;" },
-          { comment: "#/ID:bUAl\\+t9X/;" },
-          { comment: "# But this fails:" },
-          { comment: "#/bUAl+t9X/; " },
-          {
-            comment:
-              "# It's also worth noting that prefixing it with 'ID:' can cause the filter to fail to accurately detect when using recursive filtering. To assure it works fully stick to just using the hash like 'bUAl+t9X'",
-          },
-        ],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".poster_hash").html();
-        },
-        responseObjFunction: function (response) {
-          return response["poster_hash_processed"];
-        },
-      },
-      capcode: {
-        name: "Capcode",
-        value: [
-          { comment: "# Set a custom class for mods:" },
-          { comment: "#/Mod$/;highlight:mod;" },
-          { comment: "# Set a custom class for moot:" },
-          { comment: "#/Admin$/;highlight:moot;" },
-          { comment: "# (highlighting isn't implemented yet)" },
-          {
-            comment:
-              "# For recursive filter to always work you will need to add regex lines for M, A & D for Moderators, Admins and Developers respectively",
-          },
-          {
-            comment:
-              "# e.g. /A/; will filter Admins accurately always whilst /Admin/; won't always work for recursively filtered posts",
-          },
-        ],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".post_level").html();
-        },
-        responseObjFunction: function (response) {
-          return response["capcode"];
-        },
-      },
-      subject: {
-        name: "Subject",
-        value: [{ comment: "#/(^|[^A-z])quest([^A-z]|$)/i;boards:tg;" }],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".post_title").html();
-        },
-        responseObjFunction: function (response) {
-          return response["title_processed"];
-        },
-      },
-      comment: {
-        name: "Comment",
-        value: [{ comment: "#/daki[\\\\S]*/i; boards:tg;" }],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".text").html();
-        },
-        responseObjFunction: function (response) {
-          return response["comment"];
-        },
-      },
-      flag: {
-        name: "Flag",
-        value: [
-          { comment: "#Remove kebob" },
-          { comment: "#/turkey/i;mode:remove;" },
-        ],
-        threadPostFunction: function (currentPost) {
-          return $(currentPost).find(".flag").attr("title");
-        },
-        responseObjFunction: function (response) {
-          return response["poster_country_name_processed"];
-        },
-      },
-      filename: {
-        name: "Filename",
-        value: [],
-        threadPostFunction: function (currentPost) {
-          var combined = "";
-          if ($(currentPost).hasClass("thread")) {
-            combined = $(currentPost).find(".post_file_filename").html();
-          } else {
-            $.each($(currentPost).find(".post_file_filename"), function () {
-              combined += this.innerHTML;
-            });
-          }
-          return combined;
-        },
-        responseObjFunction: function (response) {
-          if (response["media"] === null || response["media"] === undefined) {
-            return "";
-          }
-          return response["media"]["media_filename_processed"];
-        },
-      },
-      fileurl: {
-        name: "File URL",
-        value: [
-          { comment: "# Filter by site for example:" },
-          { comment: "#/tumblr/;" },
-        ],
-        threadPostFunction: function (currentPost) {
-          var combined = "";
-          var $currentPost = $(currentPost);
-          if ($currentPost.hasClass("thread")) {
-            var $currentPostFilename = $currentPost.find(".post_file_filename");
-            if ($currentPostFilename.length) {
-              combined = $currentPostFilename[0].href;
-            }
-          } else {
-            $.each($currentPost.find(".post_file_filename"), function () {
-              combined += this.href;
-            });
-          }
-          return combined;
-        },
-        responseObjFunction: function (response) {
-          if (response["media"] === null || response["media"] === undefined) {
-            return "";
-          }
-          return response["media"]["remote_media_link"];
+        shortcut: {
+          name: "Hide shortcut",
+          description: "Pressing H will toggle the visiblity of the headerbar",
+          type: "checkbox",
+          value: true,
         },
       },
     },
-  };
+    removeJfont: {
+      name: "Remove Japanese Font",
+      description:
+        "Enabling this will make the addition of japanese characters to a post cease to change the post font and size. Presumably will cause issues for people whose default font doesn't support japanese characters",
+      type: "checkbox",
+      value: false,
+    },
+    labelDeletions: {
+      name: "Label Deletions",
+      description:
+        "Enabling this will add 'Deleted' to all trashcan icons that designate deleted posts to allow for easier searching",
+      type: "checkbox",
+      value: false,
+    },
+  },
+  FilterSettings: {
+    name: {
+      name: "Name",
+      value: [{ comment: "#/久保島のミズゴロウ/;" }],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".post_author").html();
+      },
+      responseObjFunction: function (response) {
+        return response["name_processed"];
+      },
+    },
+    tripcode: {
+      name: "Tripcode",
+      value: [
+        { comment: "#/!!/90sanF9F3Z/;" },
+        { comment: "#/!!T2TCnNZDvZu/;" },
+      ],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".post_tripcode").html();
+      },
+      responseObjFunction: function (response) {
+        return response["trip_processed"];
+      },
+    },
+    uniqueID: {
+      name: "Unique ID",
+      value: [
+        { comment: "# Remember to escape any special characters" },
+        { comment: "# For example these are valid:" },
+        { comment: "#/bUAl\\+t9X/;" },
+        { comment: "#/ID:bUAl\\+t9X/;" },
+        { comment: "# But this fails:" },
+        { comment: "#/bUAl+t9X/; " },
+        {
+          comment:
+            "# It's also worth noting that prefixing it with 'ID:' can cause the filter to fail to accurately detect when using recursive filtering. To assure it works fully stick to just using the hash like 'bUAl+t9X'",
+        },
+      ],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".poster_hash").html();
+      },
+      responseObjFunction: function (response) {
+        return response["poster_hash_processed"];
+      },
+    },
+    capcode: {
+      name: "Capcode",
+      value: [
+        { comment: "# Set a custom class for mods:" },
+        { comment: "#/Mod$/;highlight:mod;" },
+        { comment: "# Set a custom class for moot:" },
+        { comment: "#/Admin$/;highlight:moot;" },
+        { comment: "# (highlighting isn't implemented yet)" },
+        {
+          comment:
+            "# For recursive filter to always work you will need to add regex lines for M, A & D for Moderators, Admins and Developers respectively",
+        },
+        {
+          comment:
+            "# e.g. /A/; will filter Admins accurately always whilst /Admin/; won't always work for recursively filtered posts",
+        },
+      ],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".post_level").html();
+      },
+      responseObjFunction: function (response) {
+        return response["capcode"];
+      },
+    },
+    subject: {
+      name: "Subject",
+      value: [{ comment: "#/(^|[^A-z])quest([^A-z]|$)/i;boards:tg;" }],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".post_title").html();
+      },
+      responseObjFunction: function (response) {
+        return response["title_processed"];
+      },
+    },
+    comment: {
+      name: "Comment",
+      value: [{ comment: "#/daki[\\\\S]*/i; boards:tg;" }],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".text").html();
+      },
+      responseObjFunction: function (response) {
+        return response["comment"];
+      },
+    },
+    flag: {
+      name: "Flag",
+      value: [
+        { comment: "#Remove kebob" },
+        { comment: "#/turkey/i;mode:remove;" },
+      ],
+      threadPostFunction: function (currentPost) {
+        return $(currentPost).find(".flag").attr("title");
+      },
+      responseObjFunction: function (response) {
+        return response["poster_country_name_processed"];
+      },
+    },
+    filename: {
+      name: "Filename",
+      value: [],
+      threadPostFunction: function (currentPost) {
+        var combined = "";
+        if ($(currentPost).hasClass("thread")) {
+          combined = $(currentPost).find(".post_file_filename").html();
+        } else {
+          $.each($(currentPost).find(".post_file_filename"), function () {
+            combined += this.innerHTML;
+          });
+        }
+        return combined;
+      },
+      responseObjFunction: function (response) {
+        if (response["media"] === null || response["media"] === undefined) {
+          return "";
+        }
+        return response["media"]["media_filename_processed"];
+      },
+    },
+    fileurl: {
+      name: "File URL",
+      value: [
+        { comment: "# Filter by site for example:" },
+        { comment: "#/tumblr/;" },
+      ],
+      threadPostFunction: function (currentPost) {
+        var combined = "";
+        var $currentPost = $(currentPost);
+        if ($currentPost.hasClass("thread")) {
+          var $currentPostFilename = $currentPost.find(".post_file_filename");
+          if ($currentPostFilename.length) {
+            combined = $currentPostFilename[0].href;
+          }
+        } else {
+          $.each($currentPost.find(".post_file_filename"), function () {
+            combined += this.href;
+          });
+        }
+        return combined;
+      },
+      responseObjFunction: function (response) {
+        if (response["media"] === null || response["media"] === undefined) {
+          return "";
+        }
+        return response["media"]["remote_media_link"];
+      },
+    },
+  },
+};
 var linksClicked = [];
 var focused = { id: null };
 const inverse = !true;
@@ -954,563 +953,614 @@ class PostGraph {
     return result;
   }
   // DFS to find OP/root from any post
-findOP(postId) {
+  findOP(postId) {
     const visited = new Set();
     const path = [];
-    
+
     console.log(`Finding OP from post: ${postId}`);
-    
+
     const dfs = (currentId) => {
-        // Cycle detection
-        if (visited.has(currentId)) {
-            console.warn(`Cycle detected in path: ${path.join(' -> ')} -> ${currentId}`);
-            return currentId; // Return current as fallback
-        }
-        
-        visited.add(currentId);
-        path.push(currentId);
-        
-        const node = this.nodes.get(currentId);
-        if (!node) {
-            console.warn(`Node ${currentId} not found`);
-            return currentId;
-        }
-        
-        // Check if this is OP (no parents OR marked as OP)
-        const hasNoParents = (!node.parents || node.parents.size === 0) && !node.parent;
-        const isMarkedAsOP = node.data?.op === "1" || node.data?.op === 1;
-        
-        if (hasNoParents || isMarkedAsOP) {
-            console.log(`Found OP: ${currentId} (path: ${path.join(' -> ')})`);
-            return currentId;
-        }
-        
-        // Go up parent chain - use first/primary parent
-        let nextParent = null;
-        if (node.parents && node.parents.size > 0) {
-            // Use earliest parent (lowest post number)
-            const sortedParents = Array.from(node.parents).sort((a, b) => parseInt(a) - parseInt(b));
-            nextParent = sortedParents[0];
-        } else if (node.parent) {
-            nextParent = node.parent;
-        }
-        
-        if (nextParent) {
-            console.log(`Following parent chain: ${currentId} -> ${nextParent}`);
-            return dfs(nextParent);
-        } else {
-            // No parent found, this must be root
-            console.log(`No parent found, ${currentId} is root`);
-            return currentId;
-        }
+      // Cycle detection
+      if (visited.has(currentId)) {
+        console.warn(
+          `Cycle detected in path: ${path.join(" -> ")} -> ${currentId}`
+        );
+        return currentId; // Return current as fallback
+      }
+
+      visited.add(currentId);
+      path.push(currentId);
+
+      const node = this.nodes.get(currentId);
+      if (!node) {
+        console.warn(`Node ${currentId} not found`);
+        return currentId;
+      }
+
+      // Check if this is OP (no parents OR marked as OP)
+      const hasNoParents =
+        (!node.parents || node.parents.size === 0) && !node.parent;
+      const isMarkedAsOP = node.data?.op === "1" || node.data?.op === 1;
+
+      if (hasNoParents || isMarkedAsOP) {
+        console.log(`Found OP: ${currentId} (path: ${path.join(" -> ")})`);
+        return currentId;
+      }
+
+      // Go up parent chain - use first/primary parent
+      let nextParent = null;
+      if (node.parents && node.parents.size > 0) {
+        // Use earliest parent (lowest post number)
+        const sortedParents = Array.from(node.parents).sort(
+          (a, b) => parseInt(a) - parseInt(b)
+        );
+        nextParent = sortedParents[0];
+      } else if (node.parent) {
+        nextParent = node.parent;
+      }
+
+      if (nextParent) {
+        console.log(`Following parent chain: ${currentId} -> ${nextParent}`);
+        return dfs(nextParent);
+      } else {
+        // No parent found, this must be root
+        console.log(`No parent found, ${currentId} is root`);
+        return currentId;
+      }
     };
-    
+
     const opId = dfs(postId);
     console.log(`OP for post ${postId}: ${opId}`);
     return opId;
-}
+  }
 
-findPenultimateRoot(postId) {
+  findPenultimateRoot(postId) {
     const visited = new Set();
     const path = [];
-    
+
     console.log(`Finding penultimate root from post: ${postId}`);
-    
+
     const dfs = (currentId) => {
-        if (visited.has(currentId)) {
-            console.warn(`Cycle detected: ${path.join(' -> ')} -> ${currentId}`);
-            return null;
-        }
-        
-        visited.add(currentId);
-        path.push(currentId);
-        
-        const node = this.nodes.get(currentId);
-        if (!node) {
-            console.warn(`Node ${currentId} not found`);
-            return null;
-        }
-        
-        // If this node has no parents, it's the root
-        if (node.parents.size === 0 || node.data?.op === "1") {
-            console.log(`Reached root: ${currentId}`);
-            
-            // Return the previous node in path (penultimate root)
-            if (path.length >= 2) {
-                const penultimate = path[path.length - 2];
-                console.log(`Penultimate root: ${penultimate} (path: ${path.join(' -> ')})`);
-                return penultimate;
-            } else {
-                console.log(`No penultimate root - ${currentId} is directly connected to root or is root`);
-                return currentId; // Return the root itself if no penultimate
-            }
-        }
-        
-        // Go up parent chain - use first/primary parent
-        const sortedParents = Array.from(node.parents).sort((a, b) => parseInt(a) - parseInt(b));
-        const nextParent = sortedParents[0];
-        
-        if (nextParent) {
-            return dfs(nextParent);
+      if (visited.has(currentId)) {
+        console.warn(`Cycle detected: ${path.join(" -> ")} -> ${currentId}`);
+        return null;
+      }
+
+      visited.add(currentId);
+      path.push(currentId);
+
+      const node = this.nodes.get(currentId);
+      if (!node) {
+        console.warn(`Node ${currentId} not found`);
+        return null;
+      }
+
+      // If this node has no parents, it's the root
+      if (node.parents.size === 0 || node.data?.op === "1") {
+        console.log(`Reached root: ${currentId}`);
+
+        // Return the previous node in path (penultimate root)
+        if (path.length >= 2) {
+          const penultimate = path[path.length - 2];
+          console.log(
+            `Penultimate root: ${penultimate} (path: ${path.join(" -> ")})`
+          );
+          return penultimate;
         } else {
-            // This shouldn't happen if graph is consistent
-            console.log(`${currentId} has no parents but isn't marked as root`);
-            return path.length >= 2 ? path[path.length - 2] : currentId;
+          console.log(
+            `No penultimate root - ${currentId} is directly connected to root or is root`
+          );
+          return currentId; // Return the root itself if no penultimate
         }
+      }
+
+      // Go up parent chain - use first/primary parent
+      const sortedParents = Array.from(node.parents).sort(
+        (a, b) => parseInt(a) - parseInt(b)
+      );
+      const nextParent = sortedParents[0];
+
+      if (nextParent) {
+        return dfs(nextParent);
+      } else {
+        // This shouldn't happen if graph is consistent
+        console.log(`${currentId} has no parents but isn't marked as root`);
+        return path.length >= 2 ? path[path.length - 2] : currentId;
+      }
     };
-    
+
     const penultimate = dfs(postId);
     console.log(`Penultimate root for post ${postId}: ${penultimate}`);
     return penultimate;
-}
-getReplyChainFromPostFocused(startPostId, includeOP = true, maxPosts = 50) {
-  const result = [];
-  const visited = new Set();
-  const levelMap = new Map();
-  const toProcess = new Set(); // Track all posts we need to include
-  
-  // Step 1: Add OP if requested
-  let opId = null;
-  if (includeOP) {
+  }
+  getReplyChainFromPostFocused(startPostId, includeOP = true, maxPosts = 50) {
+    const result = [];
+    const visited = new Set();
+    const levelMap = new Map();
+    const toProcess = new Set(); // Track all posts we need to include
+
+    // Step 1: Add OP if requested
+    let opId = null;
+    if (includeOP) {
       opId = this.findOP(startPostId);
       const opNode = this.nodes.get(opId);
-      
+
       if (opNode) {
-          result.push({
-              id: opId,
-              level: 0,
-              data: opNode.data,
-              replies: Array.from(opNode.replies),
-              parents: Array.from(opNode.parents),
-              quotedParents: [],
-              parentCount: opNode.parents.size,
-              quotedParentCount: 0,
-              isOP: true
-          });
-          visited.add(opId);
-          levelMap.set(opId, 0);
+        result.push({
+          id: opId,
+          level: 0,
+          data: opNode.data,
+          replies: Array.from(opNode.replies),
+          parents: Array.from(opNode.parents),
+          quotedParents: [],
+          parentCount: opNode.parents.size,
+          quotedParentCount: 0,
+          isOP: true,
+        });
+        visited.add(opId);
+        levelMap.set(opId, 0);
       }
-  }
-  
-  // Step 2: Collect ALL posts that should be included
-  const collectRelatedPosts = (postId, maxDepth = 3) => {
+    }
+
+    // Step 2: Collect ALL posts that should be included
+    const collectRelatedPosts = (postId, maxDepth = 3) => {
       const queue = [{ id: postId, depth: 0 }];
       const seen = new Set();
-      
+
       while (queue.length > 0) {
-          const { id, depth } = queue.shift();
-          
-          if (seen.has(id) || depth > maxDepth) continue;
-          seen.add(id);
-          toProcess.add(id);
-          
-          const node = this.nodes.get(id);
-          if (!node) continue;
-          
-          // Add replies
-          Array.from(node.replies).forEach(replyId => {
-              if (!seen.has(replyId)) {
-                  queue.push({ id: replyId, depth: depth + 1 });
-              }
-          });
-          
-          // Add quoted posts
-          const commentText = node.data?.comment || node.data?.com || "";
-          const quotedParents = extractParentIds(commentText || "").filter(pid => 
-              pid !== id && this.nodes.has(pid)
-          );
-          
-          quotedParents.forEach(quotedId => {
-              if (!seen.has(quotedId)) {
-                  queue.push({ id: quotedId, depth: depth + 1 });
-              }
-          });
-          
-          // Add posts that quote this one (reverse lookup)
-          for (const [nodeId, nodeData] of this.nodes.entries()) {
-              if (seen.has(nodeId)) continue;
-              
-              const nodeComment = nodeData.data?.comment || nodeData.data?.com || "";
-              const nodeQuotes = extractParentIds(nodeComment || "");
-              
-              if (nodeQuotes.includes(id)) {
-                  queue.push({ id: nodeId, depth: depth + 1 });
-              }
+        const { id, depth } = queue.shift();
+
+        if (seen.has(id) || depth > maxDepth) continue;
+        seen.add(id);
+        toProcess.add(id);
+
+        const node = this.nodes.get(id);
+        if (!node) continue;
+
+        // Add replies
+        Array.from(node.replies).forEach((replyId) => {
+          if (!seen.has(replyId)) {
+            queue.push({ id: replyId, depth: depth + 1 });
           }
+        });
+
+        // Add quoted posts
+        const commentText = node.data?.comment || node.data?.com || "";
+        const quotedParents = extractParentIds(commentText || "").filter(
+          (pid) => pid !== id && this.nodes.has(pid)
+        );
+
+        quotedParents.forEach((quotedId) => {
+          if (!seen.has(quotedId)) {
+            queue.push({ id: quotedId, depth: depth + 1 });
+          }
+        });
+
+        // Add posts that quote this one (reverse lookup)
+        for (const [nodeId, nodeData] of this.nodes.entries()) {
+          if (seen.has(nodeId)) continue;
+
+          const nodeComment =
+            nodeData.data?.comment || nodeData.data?.com || "";
+          const nodeQuotes = extractParentIds(nodeComment || "");
+
+          if (nodeQuotes.includes(id)) {
+            queue.push({ id: nodeId, depth: depth + 1 });
+          }
+        }
       }
-  };
-  
-  // Collect related posts
-  collectRelatedPosts(startPostId);
-  
-  console.log(`Collected ${toProcess.size} related posts for ${startPostId}:`, Array.from(toProcess).sort());
-  
-  // Step 3: Process collected posts with proper level calculation
-  const getQuotedParents = (postId, commentText) => {
+    };
+
+    // Collect related posts
+    collectRelatedPosts(startPostId);
+
+    console.log(
+      `Collected ${toProcess.size} related posts for ${startPostId}:`,
+      Array.from(toProcess).sort()
+    );
+
+    // Step 3: Process collected posts with proper level calculation
+    const getQuotedParents = (postId, commentText) => {
       const rawQuotes = extractParentIds(commentText || "");
-      return rawQuotes.filter(pid => 
-          pid !== postId && 
-          toProcess.has(pid) // Only include quotes within our result set
+      return rawQuotes.filter(
+        (pid) => pid !== postId && toProcess.has(pid) // Only include quotes within our result set
       );
-  };
-  
-  const calculateLevel = (postId, commentText) => {
+    };
+
+    const calculateLevel = (postId, commentText) => {
       if (levelMap.has(postId)) {
-          return levelMap.get(postId);
+        return levelMap.get(postId);
       }
-      
+
       const quotedParents = getQuotedParents(postId, commentText);
-      
+
       if (quotedParents.length === 0) {
-          const level = postId === opId ? 0 : 1;
-          levelMap.set(postId, level);
-          return level;
+        const level = postId === opId ? 0 : 1;
+        levelMap.set(postId, level);
+        return level;
       }
-      
+
       let maxParentLevel = -1;
       let validParentLevels = 0;
-      
+
       for (const parentId of quotedParents) {
-          if (levelMap.has(parentId)) {
-              maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
-              validParentLevels++;
-          }
+        if (levelMap.has(parentId)) {
+          maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
+          validParentLevels++;
+        }
       }
-      
+
       if (validParentLevels === quotedParents.length) {
-          const level = maxParentLevel + 1;
-          levelMap.set(postId, level);
-          return level;
+        const level = maxParentLevel + 1;
+        levelMap.set(postId, level);
+        return level;
       }
-      
+
       return null; // Level not ready yet
-  };
-  
-  // Multi-pass processing
-  const postsToProcess = Array.from(toProcess).filter(id => !visited.has(id));
-  let passes = 0;
-  const maxPasses = 4;
-  
-  while (postsToProcess.length > 0 && passes < maxPasses) {
+    };
+
+    // Multi-pass processing
+    const postsToProcess = Array.from(toProcess).filter(
+      (id) => !visited.has(id)
+    );
+    let passes = 0;
+    const maxPasses = 4000;
+
+    while (postsToProcess.length > 0 && passes < maxPasses) {
       const processed = [];
       passes++;
-      
+
       for (const postId of postsToProcess) {
-          if (visited.has(postId)) continue;
-          
-          const node = this.nodes.get(postId);
-          if (!node) continue;
-          
-          const commentText = node.data?.comment || node.data?.com || "";
-          const level = calculateLevel(postId, commentText);
-          
-          if (level === null) continue; // Skip this pass
-          
-          const quotedParents = getQuotedParents(postId, commentText);
-          
-          visited.add(postId);
-          processed.push(postId);
-          
-          result.push({
-              id: postId,
-              level: level,
-              data: node.data,
-              replies: Array.from(node.replies),
-              parents: Array.from(node.parents),
-              quotedParents: quotedParents,
-              parentCount: node.parents.size,
-              quotedParentCount: quotedParents.length,
-              isOP: postId === opId
-          });
-      }
-      
-      // Remove processed posts
-      processed.forEach(id => {
-          const index = postsToProcess.indexOf(id);
-          if (index > -1) postsToProcess.splice(index, 1);
-      });
-      
-      console.log(`Pass ${passes}: Processed ${processed.length} posts, ${postsToProcess.length} remaining`);
-  }
-  
-  // Process any remaining posts with default levels
-  for (const postId of postsToProcess) {
-      if (visited.has(postId)) continue;
-      
-      const node = this.nodes.get(postId);
-      if (!node) continue;
-      
-      const commentText = node.data?.comment || node.data?.com || "";
-      const quotedParents = getQuotedParents(postId, commentText);
-      
-      visited.add(postId);
-      
-      result.push({
+        if (visited.has(postId)) continue;
+
+        const node = this.nodes.get(postId);
+        if (!node) continue;
+
+        const commentText = node.data?.comment || node.data?.com || "";
+        const level = calculateLevel(postId, commentText);
+
+        if (level === null) continue; // Skip this pass
+
+        const quotedParents = getQuotedParents(postId, commentText);
+
+        visited.add(postId);
+        processed.push(postId);
+
+        result.push({
           id: postId,
-          level: 2, // Default level
+          level: level,
           data: node.data,
           replies: Array.from(node.replies),
           parents: Array.from(node.parents),
           quotedParents: quotedParents,
           parentCount: node.parents.size,
           quotedParentCount: quotedParents.length,
-          isOP: postId === opId
+          isOP: postId === opId,
+        });
+      }
+
+      // Remove processed posts
+      processed.forEach((id) => {
+        const index = postsToProcess.indexOf(id);
+        if (index > -1) postsToProcess.splice(index, 1);
       });
-  }
-  
-  // Sort by level, then by post ID
-  result.sort((a, b) => {
+
+      console.log(
+        `Pass ${passes}: Processed ${processed.length} posts, ${postsToProcess.length} remaining`
+      );
+    }
+
+    // Process any remaining posts with default levels
+    for (const postId of postsToProcess) {
+      if (visited.has(postId)) continue;
+
+      const node = this.nodes.get(postId);
+      if (!node) continue;
+
+      const commentText = node.data?.comment || node.data?.com || "";
+      const quotedParents = getQuotedParents(postId, commentText);
+
+      visited.add(postId);
+
+      result.push({
+        id: postId,
+        level: 2, // Default level
+        data: node.data,
+        replies: Array.from(node.replies),
+        parents: Array.from(node.parents),
+        quotedParents: quotedParents,
+        parentCount: node.parents.size,
+        quotedParentCount: quotedParents.length,
+        isOP: postId === opId,
+      });
+    }
+
+    // Sort by level, then by post ID
+    result.sort((a, b) => {
       if (a.level !== b.level) return a.level - b.level;
       return parseInt(a.id) - parseInt(b.id);
-  });
-  
-  console.log(`Final result: ${result.length} posts`);
-  result.forEach(post => {
-      console.log(`${post.id} L${post.level}: ${post.quotedParentCount > 0 ? `quotes [${post.quotedParents.join(', ')}]` : 'no quotes'}`);
-  });
-  
-  return result;
-}
-getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
-  const result = [];
-  const visited = new Set();
-  const levelMap = new Map(); // Track computed levels for each post
-  
-  // Step 1: Add OP if requested
-  let opId = null;
-  if (includeOP) {
+    });
+
+    console.log(`Final result: ${result.length} posts`);
+    result.forEach((post) => {
+      console.log(
+        `${post.id} L${post.level}: ${
+          post.quotedParentCount > 0
+            ? `quotes [${post.quotedParents.join(", ")}]`
+            : "no quotes"
+        }`
+      );
+    });
+
+    return result;
+  }
+  getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
+    const result = [];
+    const visited = new Set();
+    const levelMap = new Map(); // Track computed levels for each post
+
+    // Step 1: Add OP if requested
+    let opId = null;
+    if (includeOP) {
       opId = this.findOP(startPostId);
       const opNode = this.nodes.get(opId);
-      
+
       if (opNode) {
-          result.push({
-              id: opId,
-              level: 0,
-              data: opNode.data,
-              replies: Array.from(opNode.replies),
-              parents: Array.from(opNode.parents),
-              parentCount: opNode.parents.size,
-              isOP: true
-          });
-          visited.add(opId);
-          levelMap.set(opId, 0);
+        result.push({
+          id: opId,
+          level: 0,
+          data: opNode.data,
+          replies: Array.from(opNode.replies),
+          parents: Array.from(opNode.parents),
+          parentCount: opNode.parents.size,
+          isOP: true,
+        });
+        visited.add(opId);
+        levelMap.set(opId, 0);
       }
-  }
-  
-  // Helper function to calculate proper level based on parents
-  const calculateLevel = (postId, defaultLevel) => {
+    }
+
+    // Helper function to calculate proper level based on parents
+    const calculateLevel = (postId, defaultLevel) => {
       if (levelMap.has(postId)) {
-          return levelMap.get(postId);
+        return levelMap.get(postId);
       }
-      
+
       const node = this.nodes.get(postId);
       if (!node) return defaultLevel;
-      
+
       // If no parents, it's a root (but not OP since we handle OP separately)
       if (node.parents.size === 0) {
-          const level = postId === opId ? 0 : 1;
-          levelMap.set(postId, level);
-          return level;
+        const level = postId === opId ? 0 : 1;
+        levelMap.set(postId, level);
+        return level;
       }
-      
+
       // Calculate level based on parent levels
       let maxParentLevel = -1;
       let parentsInResult = 0;
-      
+
       for (const parentId of node.parents) {
-          if (levelMap.has(parentId)) {
-              maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
-              parentsInResult++;
-          }
+        if (levelMap.has(parentId)) {
+          maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
+          parentsInResult++;
+        }
       }
-      
+
       // If we have parent levels, use max parent level + 1
       if (maxParentLevel >= 0) {
-          const level = maxParentLevel + 1;
-          levelMap.set(postId, level);
-          return level;
+        const level = maxParentLevel + 1;
+        levelMap.set(postId, level);
+        return level;
       }
-      
+
       // Fallback to default level if parents not processed yet
       return defaultLevel;
-  };
-  
-  // Step 2: Multi-pass BFS to handle complex parent relationships
-  const queue = [{ id: startPostId, level: includeOP && startPostId !== opId ? 1 : 0 }];
-  let addedPosts = 0;
-  let passes = 0;
-  const maxPasses = 3; // Allow multiple passes to resolve complex dependencies
-  
-  while (passes < maxPasses && addedPosts < maxPosts) {
+    };
+
+    // Step 2: Multi-pass BFS to handle complex parent relationships
+    const queue = [
+      { id: startPostId, level: includeOP && startPostId !== opId ? 1 : 0 },
+    ];
+    let addedPosts = 0;
+    let passes = 0;
+    const maxPasses = 4000; // Allow multiple passes to resolve complex dependencies
+
+    while (passes < maxPasses) {
       const currentQueue = [...queue];
       queue.length = 0; // Clear queue for next pass
       let addedInThisPass = 0;
-      
-      while (currentQueue.length > 0 && addedPosts < maxPosts) {
-          const { id, level } = currentQueue.shift();
-          
-          if (visited.has(id)) continue;
-          
-          const node = this.nodes.get(id);
-          if (!node) continue;
-          
-          // Calculate proper level considering all parents
-          const properLevel = calculateLevel(id, level);
-          
-          // Check if all parents have been processed (for accurate level calculation)
-          const allParentsProcessed = Array.from(node.parents).every(pid => 
-              levelMap.has(pid) || !this.nodes.has(pid)
-          );
-          
-          // If not all parents processed, defer to next pass
-          if (node.parents.size > 0 && !allParentsProcessed && passes < maxPasses - 1) {
-              queue.push({ id, level: properLevel });
-              continue;
-          }
-          
-          visited.add(id);
-          levelMap.set(id, properLevel);
-          
-          // Get actual quoted parents from the post content
-          const actualQuotedParents = extractParentIds(node.data?.comment || node.data?.com || "");
-          const validQuotedParents = actualQuotedParents.filter(pid => this.nodes.has(pid));
-          
-          result.push({
-              id: id,
-              level: properLevel,
-              data: node.data,
-              replies: Array.from(node.replies),
-              parents: Array.from(node.parents), // Graph parents
-              quotedParents: validQuotedParents, // Actual quoted parents
-              parentCount: node.parents.size,
-              quotedParentCount: validQuotedParents.length,
-              isOP: id === opId
-          });
-          
-          addedPosts++;
-          addedInThisPass++;
-          
-          // Add replies to queue for next iteration
-          const sortedReplies = Array.from(node.replies)
-              .filter(replyId => !visited.has(replyId))
-              .sort((a, b) => parseInt(a) - parseInt(b));
-          
-          for (const replyId of sortedReplies) {
-              // Calculate expected level for reply
-              const expectedReplyLevel = properLevel + 1;
-              queue.push({ id: replyId, level: expectedReplyLevel });
-          }
-      }
-      
-      passes++;
-      console.log(`Pass ${passes}: Added ${addedInThisPass} posts, ${queue.length} remaining`);
-      
-      // If no progress in this pass, break to avoid infinite loop
-      if (addedInThisPass === 0 && queue.length > 0) {
-          console.warn(`No progress in pass ${passes}, processing remaining ${queue.length} posts with default levels`);
-          // Process remaining posts with their default levels
-          while (queue.length > 0 && addedPosts < maxPosts) {
-              const { id, level } = queue.shift();
-              if (visited.has(id)) continue;
-              
-              const node = this.nodes.get(id);
-              if (!node) continue;
-              
-              visited.add(id);
-              const actualQuotedParents = extractParentIds(node.data?.comment || node.data?.com || "");
-              const validQuotedParents = actualQuotedParents.filter(pid => this.nodes.has(pid));
-              
-              result.push({
-                  id: id,
-                  level: level,
-                  data: node.data,
-                  replies: Array.from(node.replies),
-                  parents: Array.from(node.parents),
-                  quotedParents: validQuotedParents,
-                  parentCount: node.parents.size,
-                  quotedParentCount: validQuotedParents.length,
-                  isOP: id === opId
-              });
-              addedPosts++;
-          }
-          break;
-      }
-  }
-  
-  // Sort result by level, then by post ID to maintain proper order
-  result.sort((a, b) => {
-      if (a.level !== b.level) return a.level - b.level;
-      return parseInt(a.id) - parseInt(b.id);
-  });
-  
-  console.log(`Reply chain from ${startPostId}: ${result.length} posts (${addedPosts} replies + ${includeOP ? 1 : 0} OP) in ${passes} passes`);
-  console.log('Level distribution:', result.reduce((acc, post) => {
-      acc[`L${post.level}`] = (acc[`L${post.level}`] || 0) + 1;
-      return acc;
-  }, {}));
-  
-  return result;
-}
-// Alternative: Show conversation thread around a specific post
-getConversationAround(postId, includeOP = true, maxDepth = 3) {
-    const result = [];
-    const visited = new Set();
-    
-    // Add OP if requested
-    if (includeOP) {
-        const opId = this.findOP(postId);
-        const opNode = this.nodes.get(opId);
-        
-        if (opNode && opId !== postId) {
-            result.push({
-                id: opId,
-                level: 0,
-                data: opNode.data,
-                replies: Array.from(opNode.replies),
-                parents: Array.from(opNode.parents),
-                parentCount: opNode.parents.size,
-                isOP: true
-            });
-            visited.add(opId);
-        }
-    }
-    
-    // BFS from current post with limited depth
-    const queue = [{ id: postId, level: 1 }];
-    
-    while (queue.length > 0) {
-        const { id, level } = queue.shift();
-        
-        if (visited.has(id) || level > maxDepth) continue;
-        visited.add(id);
-        
+
+      while (currentQueue.length > 0) {
+        const { id, level } = currentQueue.shift();
+
+        if (visited.has(id)) continue;
+
         const node = this.nodes.get(id);
         if (!node) continue;
-        
+
+        // Calculate proper level considering all parents
+        const properLevel = calculateLevel(id, level);
+
+        // Check if all parents have been processed (for accurate level calculation)
+        const allParentsProcessed = Array.from(node.parents).every(
+          (pid) => levelMap.has(pid) || !this.nodes.has(pid)
+        );
+
+        // If not all parents processed, defer to next pass
+        if (
+          node.parents.size > 0 &&
+          !allParentsProcessed &&
+          passes < maxPasses - 1
+        ) {
+          queue.push({ id, level: properLevel });
+          continue;
+        }
+
+        visited.add(id);
+        levelMap.set(id, properLevel);
+
+        // Get actual quoted parents from the post content
+        const actualQuotedParents = extractParentIds(
+          node.data?.comment || node.data?.com || ""
+        );
+        const validQuotedParents = actualQuotedParents.filter((pid) =>
+          this.nodes.has(pid)
+        );
+
         result.push({
+          id: id,
+          level: properLevel,
+          data: node.data,
+          replies: Array.from(node.replies),
+          parents: Array.from(node.parents), // Graph parents
+          quotedParents: validQuotedParents, // Actual quoted parents
+          parentCount: node.parents.size,
+          quotedParentCount: validQuotedParents.length,
+          isOP: id === opId,
+        });
+
+        addedPosts++;
+        addedInThisPass++;
+
+        // Add replies to queue for next iteration
+        const sortedReplies = Array.from(node.replies)
+          .filter((replyId) => !visited.has(replyId))
+          .sort((a, b) => parseInt(a) - parseInt(b));
+
+        for (const replyId of sortedReplies) {
+          // Calculate expected level for reply
+          const expectedReplyLevel = properLevel + 1;
+          queue.push({ id: replyId, level: expectedReplyLevel });
+        }
+      }
+
+      passes++;
+      console.log(
+        `Pass ${passes}: Added ${addedInThisPass} posts, ${queue.length} remaining`
+      );
+
+      // If no progress in this pass, break to avoid infinite loop
+      if (addedInThisPass === 0 && queue.length > 0) {
+        console.warn(
+          `No progress in pass ${passes}, processing remaining ${queue.length} posts with default levels`
+        );
+        // Process remaining posts with their default levels
+        while (queue.length > 0) {
+          const { id, level } = queue.shift();
+          if (visited.has(id)) continue;
+
+          const node = this.nodes.get(id);
+          if (!node) continue;
+
+          visited.add(id);
+          const actualQuotedParents = extractParentIds(
+            node.data?.comment || node.data?.com || ""
+          );
+          const validQuotedParents = actualQuotedParents.filter((pid) =>
+            this.nodes.has(pid)
+          );
+
+          result.push({
             id: id,
             level: level,
             data: node.data,
             replies: Array.from(node.replies),
             parents: Array.from(node.parents),
+            quotedParents: validQuotedParents,
             parentCount: node.parents.size,
-            isOP: id === this.findOP(postId)
-        });
-        
-        // Only add immediate replies (limited expansion)
-        const recentReplies = Array.from(node.replies)
-            .sort((a, b) => parseInt(a) - parseInt(b))
-            .slice(0, 5); // Limit to 5 most recent replies
-        
-        for (const replyId of recentReplies) {
-            if (!visited.has(replyId)) {
-                queue.push({ id: replyId, level: level + 1 });
-            }
+            quotedParentCount: validQuotedParents.length,
+            isOP: id === opId,
+          });
+          addedPosts++;
         }
+        break;
+      }
     }
-    
+
+    // Sort result by level, then by post ID to maintain proper order
+    result.sort((a, b) => {
+      if (a.level !== b.level) return a.level - b.level;
+      return parseInt(a.id) - parseInt(b.id);
+    });
+
+    console.log(
+      `Reply chain from ${startPostId}: ${
+        result.length
+      } posts (${addedPosts} replies + ${
+        includeOP ? 1 : 0
+      } OP) in ${passes} passes`
+    );
+    console.log(
+      "Level distribution:",
+      result.reduce((acc, post) => {
+        acc[`L${post.level}`] = (acc[`L${post.level}`] || 0) + 1;
+        return acc;
+      }, {})
+    );
+
     return result;
-}
+  }
+  // Alternative: Show conversation thread around a specific post
+  getConversationAround(postId, includeOP = true, maxDepth = 3) {
+    const result = [];
+    const visited = new Set();
+
+    // Add OP if requested
+    if (includeOP) {
+      const opId = this.findOP(postId);
+      const opNode = this.nodes.get(opId);
+
+      if (opNode && opId !== postId) {
+        result.push({
+          id: opId,
+          level: 0,
+          data: opNode.data,
+          replies: Array.from(opNode.replies),
+          parents: Array.from(opNode.parents),
+          parentCount: opNode.parents.size,
+          isOP: true,
+        });
+        visited.add(opId);
+      }
+    }
+
+    // BFS from current post with limited depth
+    const queue = [{ id: postId, level: 1 }];
+
+    while (queue.length > 0) {
+      const { id, level } = queue.shift();
+
+      if (visited.has(id) || level > maxDepth) continue;
+      visited.add(id);
+
+      const node = this.nodes.get(id);
+      if (!node) continue;
+
+      result.push({
+        id: id,
+        level: level,
+        data: node.data,
+        replies: Array.from(node.replies),
+        parents: Array.from(node.parents),
+        parentCount: node.parents.size,
+        isOP: id === this.findOP(postId),
+      });
+
+      // Only add immediate replies (limited expansion)
+      const recentReplies = Array.from(node.replies)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .slice(0, 5); // Limit to 5 most recent replies
+
+      for (const replyId of recentReplies) {
+        if (!visited.has(replyId)) {
+          queue.push({ id: replyId, level: level + 1 });
+        }
+      }
+    }
+
+    return result;
+  }
 }
 // Global graph instance
 var postGraph = new PostGraph();
@@ -1532,26 +1582,30 @@ const delay = (ms) => {
 function createPostElement(data) {
   const postElement = document.createElement("article");
   postElement.classList.add("post", "expanded-post");
-  
+
   // Add doc_id class if available
   if (data.doc_id) {
     postElement.classList.add(`doc_id_${data.doc_id}`);
   }
-  
+
   // Add "base" class for main posts (not inline)
   postElement.classList.add("base");
-  
+
   postElement.id = "r" + (data.num || data.no || "0");
-  
+
   let boardName = "unknown";
   if (data.board) {
-    if (typeof data.board === "object" && data.board !== null && data.board.shortname) {
+    if (
+      typeof data.board === "object" &&
+      data.board !== null &&
+      data.board.shortname
+    ) {
       boardName = data.board.shortname;
     } else if (typeof data.board === "string") {
       boardName = data.board;
     }
   }
-  
+
   postElement.setAttribute("data-board", boardName);
   if (data.doc_id) {
     postElement.setAttribute("data-doc-id", data.doc_id);
@@ -1565,7 +1619,7 @@ function createPostElement(data) {
   const pullLeft = document.createElement("div");
   pullLeft.classList.add("pull-left");
   pullLeft.style.float = "left";
-  
+
   const toggleButton = document.createElement("button");
   toggleButton.classList.add("btn-toggle-post");
   toggleButton.setAttribute("data-function", "hidePost");
@@ -1574,7 +1628,7 @@ function createPostElement(data) {
     toggleButton.setAttribute("data-doc-id", data.doc_id);
   }
   toggleButton.innerHTML = '<i class="icon-minus"></i>';
-  
+
   pullLeft.appendChild(toggleButton);
   postElement.appendChild(pullLeft);
 
@@ -1596,53 +1650,181 @@ function createPostElement(data) {
         ? `${data.media.media_w}x${data.media.media_h}`
         : "";
 
+    // Get image URL and hash for searches
+    const imageUrl = data.media.media_link;
+    const encodedImageUrl = encodeURIComponent(imageUrl);
+
+    // Extract hash from desuarchive image URLs
+    const extractHashFromDesuUrl = (url) => {
+      // Example: https://desuarchive.org/int/image/1234/56/abcd1234.jpg
+      // or: https://arch-img.b4k.dev/media/hash.jpg
+
+      if (url.includes("desuarchive.org")) {
+        const match = url.match(/\/image\/[^\/]+\/[^\/]+\/([^\/\.]+)\./);
+        return match ? match[1] : null;
+      }
+
+      if (url.includes("arch-img.b4k.dev")) {
+        const match = url.match(/\/media\/([^\/\.]+)\./);
+        return match ? match[1] : null;
+      }
+
+      if (url.includes("b4k.co/media")) {
+        const match = url.match(/\/media\/([^\/\.]+)\./);
+        return match ? match[1] : null;
+      }
+
+      return null;
+    };
+
+    // Extract image hash from various possible fields
+    const imageHash =
+      data.media.media_hash ||
+      data.media.safe_media_hash ||
+      data.media_hash ||
+      data.safe_media_hash ||
+      data.media.media_id ||
+      extractHashFromDesuUrl(imageUrl) ||
+      null;
+
+    // Get base URL for search
+    const baseUrl = (() => {
+      const currentUrl = document.URL;
+      if (currentUrl.includes("/_/search/")) {
+        const urlParts = currentUrl.split("/");
+        return `${urlParts[0]}//${urlParts[2]}`;
+      }
+      const domain = document.URL.split("/")[2];
+      const protocol = document.URL.split("/")[0];
+      return `${protocol}//${domain}`;
+    })();
+
+    // Create View Same URL
+    const viewSameUrl = imageHash
+      ? `${baseUrl}/_/search/image/${imageHash}/`
+      : imageUrl; // Fallback to image URL if no hash
+
     postFile.innerHTML = `
-            <span class="post_file_controls">
-                <a href="#" class="btnr parent">View Same</a>
-                <a href="#" class="btnr parent">Google</a>
-                <a href="#" class="btnr parent">ImgOps</a>
-                <a href="#" class="btnr parent">iqdb</a>
-                <a href="#" class="btnr parent">SauceNAO</a>
-                <a href="${data.media.media_link}" download="${filename}" class="btnr parent">
-                    <i class="icon-download-alt"></i>
-                </a>
-            </span>
-            <a href="${data.media.media_link}" class="post_file_filename" title="${filename}">${filename}</a>,
-            <span class="post_file_metadata">${filesize}${dimensions ? ", " + dimensions : ""}</span>
-        `;
+          <span class="post_file_controls">
+              <a href="${viewSameUrl}" target="_blank" rel="noopener" class="btnr parent" title="Find other posts with this image">View Same</a>
+              <a href="https://www.google.com/searchbyimage?image_url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">Google</a>
+              <a href="https://imgops.com/${imageUrl}" target="_blank" rel="noopener" class="btnr parent">ImgOps</a>
+              <a href="https://iqdb.org/?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">iqdb</a>
+              <a href="https://saucenao.com/search.php?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">SauceNAO</a>
+              <a href="${imageUrl}" download="${filename}" class="btnr parent">
+                  <i class="icon-download-alt"></i>
+              </a>
+          </span>
+          <a href="${imageUrl}" class="post_file_filename" title="${filename}">${filename}</a>,
+          <span class="post_file_metadata">${filesize}${
+      dimensions ? ", " + dimensions : ""
+    }</span>
+      `;
 
     postWrapper.appendChild(postFile);
 
     // Add image box
-    const imageBox = document.createElement("div");
-    imageBox.classList.add("thread_image_box");
+    // Add image box
+const imageBox = document.createElement("div");
+imageBox.classList.add("thread_image_box");
 
-    const imageLink = document.createElement("a");
-    imageLink.href = data.media.media_link;
-    imageLink.target = "_blank";
-    imageLink.rel = "noreferrer";
-    imageLink.classList.add("thread_image_link");
+const imageLink = document.createElement("a");
+imageLink.href = "#"; // Change from imageUrl to # to prevent navigation
+imageLink.classList.add("thread_image_link");
 
-    const imageElement = document.createElement("img");
-    imageElement.src = data.media.media_link;
-    imageElement.classList.add("post_image");
-    imageElement.loading = "lazy";
+const imageElement = document.createElement("img");
+imageElement.src = imageUrl;
+imageElement.classList.add("post_image");
+imageElement.loading = "lazy";
 
-    if (data.media.media_w && data.media.media_h) {
-      const maxWidth = Math.min(data.media.media_w, 250);
-      const maxHeight = Math.min(data.media.media_h, 250);
-      imageElement.style.maxWidth = maxWidth + "px";
-      imageElement.style.maxHeight = maxHeight + "px";
+// Add dimensions and click-to-expand functionality
+let isExpanded = false;
+const originalMaxWidth = data.media.media_w ? Math.min(data.media.media_w, 250) : 250;
+const originalMaxHeight = data.media.media_h ? Math.min(data.media.media_h, 250) : 250;
+
+// Set initial size
+imageElement.style.maxWidth = originalMaxWidth + "px";
+imageElement.style.maxHeight = originalMaxHeight + "px";
+imageElement.style.cursor = "pointer";
+imageElement.style.transition = "all 0.3s ease";
+
+// Click handler for expand/collapse
+const toggleImageSize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isExpanded) {
+        // Collapse to thumbnail
+        imageElement.style.maxWidth = originalMaxWidth + "px";
+        imageElement.style.maxHeight = originalMaxHeight + "px";
+        imageElement.style.width = "auto";
+        imageElement.style.height = "auto";
+        imageElement.style.position = "static";
+        imageElement.style.zIndex = "auto";
+        imageElement.style.boxShadow = "none";
+        imageElement.title = "Click to expand";
+        isExpanded = false;
+    } else {
+        // Expand to full size
+        imageElement.style.maxWidth = "100%";
+        imageElement.style.maxHeight = "100%";
+        imageElement.style.width = "auto";
+        imageElement.style.height = "auto";
+        imageElement.style.position = "relative";
+        imageElement.style.zIndex = "1000";
+        imageElement.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+        imageElement.title = "Click to collapse";
+        isExpanded = true;
     }
+};
 
-    imageElement.onerror = function () {
-      console.warn("Image failed to load:", data.media.media_link);
-      this.style.display = "none";
-    };
+// Add click handlers
+imageElement.addEventListener("click", toggleImageSize);
+imageLink.addEventListener("click", toggleImageSize);
 
-    imageLink.appendChild(imageElement);
-    imageBox.appendChild(imageLink);
-    postWrapper.appendChild(imageBox);
+// Add hover effect
+imageElement.addEventListener("mouseenter", () => {
+    if (!isExpanded) {
+        imageElement.style.opacity = "0.8";
+        imageElement.title = "Click to expand to full size";
+    }
+});
+
+imageElement.addEventListener("mouseleave", () => {
+    if (!isExpanded) {
+        imageElement.style.opacity = "1";
+    }
+});
+
+imageElement.onerror = function () {
+    console.warn("Image failed to load:", imageUrl);
+    
+    // Try alternative URLs if the original fails
+    let newSrc = imageUrl;
+    
+    if (imageUrl.includes("arch-img.b4k.dev")) {
+        newSrc = imageUrl.replace("arch-img.b4k.dev", "b4k.co/media");
+    } else if (imageUrl.includes("is2.4chan.org")) {
+        newSrc = imageUrl.replace("is2.4chan.org", "i.4cdn.org");
+    } else if (imageUrl.includes("is.4chan.org")) {
+        newSrc = imageUrl.replace("is.4chan.org", "i.4cdn.org");
+    }
+    
+    if (newSrc !== imageUrl) {
+        console.log("Trying alternative image source:", newSrc);
+        this.src = newSrc;
+    } else {
+        this.style.display = "none";
+    }
+};
+
+imageLink.appendChild(imageElement);
+imageBox.appendChild(imageLink);
+postWrapper.appendChild(imageBox);
+
+    // Debug log for image hash
+    console.log(`Image hash for ${filename}:`, imageHash);
+    console.log(`Full media object:`, data.media);
   }
 
   // Create header
@@ -1654,14 +1836,16 @@ function createPostElement(data) {
   const mobileControls = document.createElement("div");
   mobileControls.classList.add("post_mobile_controls_collapse", "dropdown");
   mobileControls.innerHTML = `
-        <button data-toggle="dropdown" class="btnr parent">
-            <i class="icon-th-list"></i>
-        </button>
-        <ul class="dropdown-menu" role="menu">
-            <li class="nav-header">Post</li>
-            <li><a href="#" data-post="${data.doc_id || ''}" data-post-id="${data.num || data.no}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a></li>
-        </ul>
-    `;
+      <button data-toggle="dropdown" class="btnr parent">
+          <i class="icon-th-list"></i>
+      </button>
+      <ul class="dropdown-menu" role="menu">
+          <li class="nav-header">Post</li>
+          <li><a href="#" data-post="${data.doc_id || ""}" data-post-id="${
+    data.num || data.no
+  }" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a></li>
+      </ul>
+  `;
   postData.appendChild(mobileControls);
 
   // Board indicator (show board like /int/)
@@ -1690,6 +1874,16 @@ function createPostElement(data) {
   tripcode.textContent = data.trip || "";
   posterData.appendChild(tripcode);
 
+  // Add poster ID if available
+  if (data.poster_hash || data.id) {
+    const posterId = document.createElement("span");
+    posterId.classList.add("poster_id");
+    posterId.style.cssText =
+      "background: #d6daf0; color: #000; padding: 0 4px; margin-left: 5px; font-weight: bold; border-radius: 2px;";
+    posterId.textContent = `ID: ${data.poster_hash || data.id}`;
+    posterData.appendChild(posterId);
+  }
+
   postData.appendChild(posterData);
 
   // Timestamp
@@ -1703,11 +1897,27 @@ function createPostElement(data) {
 
     if (!isNaN(date.getTime())) {
       timeElement.setAttribute("datetime", date.toISOString());
-      timeElement.setAttribute("title", `4chan Time: ${data.fourchan_date || date.toLocaleDateString()}`);
+      timeElement.setAttribute(
+        "title",
+        `4chan Time: ${data.fourchan_date || date.toLocaleDateString()}`
+      );
 
       // Format: "Wed 16 Jul 2025 04:51:37"
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
 
       const dayName = days[date.getDay()];
       const day = date.getDate().toString().padStart(2, "0");
@@ -1724,12 +1934,26 @@ function createPostElement(data) {
     postData.appendChild(timeWrap);
   }
 
-  // Post number links
+  // Get base URL for links (fixed for search pages)
+  const getBaseUrl = () => {
+    const currentUrl = document.URL;
+
+    if (currentUrl.includes("/_/search/")) {
+      const urlParts = currentUrl.split("/");
+      return `${urlParts[0]}//${urlParts[2]}`;
+    }
+
+    const domain = document.URL.split("/")[2];
+    const protocol = document.URL.split("/")[0];
+    return `${protocol}//${domain}`;
+  };
+
+  const baseUrl = getBaseUrl();
   const postNum = data.num || data.no;
-  const domain = document.URL.split("/")[2];
-  const http = document.URL.split("/")[0];
-  const url = `${http}://${domain}/${boardName}/thread/${data.thread_num || postNum}/#${postNum}`;
-  
+  const threadNum = data.thread_num || data.resto || postNum;
+  const url = `${baseUrl}/${boardName}/thread/${threadNum}/#${postNum}`;
+
+  // Post number links
   const postLink1 = document.createElement("a");
   postLink1.href = url;
   postLink1.setAttribute("data-post", postNum);
@@ -1739,7 +1963,7 @@ function createPostElement(data) {
   postData.appendChild(postLink1);
 
   const postLink2 = document.createElement("a");
-  postLink2.href = `${http}://${domain}/${boardName}/thread/${data.thread_num || postNum}/#q${postNum}`;
+  postLink2.href = `${baseUrl}/${boardName}/thread/${threadNum}/#q${postNum}`;
   postLink2.setAttribute("data-post", postNum);
   postLink2.setAttribute("data-function", "quote");
   postLink2.setAttribute("title", "Reply to this post");
@@ -1749,19 +1973,22 @@ function createPostElement(data) {
   // Post type (flags, etc.)
   const postType = document.createElement("span");
   postType.classList.add("post_type");
-  
+
   // Add country flag exactly like desuarchive
   if (data.poster_country) {
     const countryCode = data.poster_country.toLowerCase(); // "br"
-    const countryName = data.poster_country_name || data.poster_country_name_processed || data.poster_country.toUpperCase();
-    
+    const countryName =
+      data.poster_country_name ||
+      data.poster_country_name_processed ||
+      data.poster_country.toUpperCase();
+
     const countryFlag = document.createElement("span");
     countryFlag.title = countryName; // "Brazil"
     countryFlag.classList.add("flag", `flag-${countryCode}`); // "flag flag-br"
-    
+
     postType.appendChild(countryFlag);
   }
-  
+
   postData.appendChild(postType);
 
   // Mobile view
@@ -1774,31 +2001,66 @@ function createPostElement(data) {
   const mobileBulk = document.createElement("span");
   mobileBulk.classList.add("mobile_bulk");
   postData.appendChild(mobileBulk);
-
   // Post controls
   const postControls = document.createElement("span");
   postControls.classList.add("post_controls");
   postControls.innerHTML = `
-        <a href="${url}" class="btnr parent">View</a>
-        <a href="#" class="btnr parent" data-post="${data.doc_id || ''}" data-post-id="${postNum}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a>
-    `;
+          <a href="${url}" class="btnr parent">View</a>
+          <a href="#" class="btnr parent" data-post="${
+            data.doc_id || ""
+          }" data-post-id="${postNum}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a>
+      `;
+
+  // Add "Expand All" button if post has replies
+  if (data.replies && data.replies > 0) {
+    postControls.innerHTML += `<a href="#" class="btnr parent expand-all-btn">Expand All (${data.replies})</a>`;
+  }
+
   postData.appendChild(postControls);
+
+  // Add OP button if this is the original post
+  if (data.op === "1" || data.resto === 0 || data.resto === null) {
+    const opButton = document.createElement("button");
+    opButton.classList.add("OP-button");
+    opButton.style.cssText =
+      "height: 24px; border-radius: 50%; color: white; background: rgb(34, 0, 68); margin-left: 5px;";
+    opButton.textContent = "OP";
+    postData.appendChild(opButton);
+  }
 
   header.appendChild(postData);
   postWrapper.appendChild(header);
 
-  // Backlink list
+  // Backlink list (quoted by)
   const backlinkList = document.createElement("div");
   backlinkList.classList.add("backlink_list");
-  backlinkList.innerHTML = `Quoted By: <span class="post_backlink" data-post="${postNum}"></span>`;
+  backlinkList.innerHTML = `Quoted By: <span class="post_backlink" data-post="${postNum}" id="p_b${postNum}"></span>`;
   postWrapper.appendChild(backlinkList);
 
   // Post content
   const textDiv = document.createElement("div");
   textDiv.classList.add("text");
-  const content = data.comment_processed || data.com || data.comment || data.content || "";
+  const content =
+    data.comment_processed || data.com || data.comment || data.content || "";
   textDiv.innerHTML = content;
   postWrapper.appendChild(textDiv);
+
+  // Add backlinks section (replies to this post) if they exist
+  if (data.quoted_by && data.quoted_by.length > 0) {
+    const backlinksDiv = document.createElement("div");
+    backlinksDiv.classList.add("backlinks");
+    backlinksDiv.style.cssText = "font-size: 0.7rem; padding: 2px;";
+
+    const backlinksHTML = data.quoted_by
+      .map(
+        (replyId) =>
+          `<a href="${baseUrl}/${boardName}/thread/${threadNum}/#${replyId}" class="backlink inlined" data-function="highlight" data-backlink="true" data-board="${boardName}" data-post="${replyId}" style="color: rgb(174, 148, 112);">&gt;&gt;${replyId}</a>`
+      )
+      .join(" ");
+
+    backlinksDiv.innerHTML = `Quoted By: ${backlinksHTML}`;
+    postWrapper.appendChild(backlinksDiv);
+  }
 
   postElement.appendChild(postWrapper);
 
@@ -1927,460 +2189,9 @@ async function processNextBacklink() {
   setTimeout(processNextBacklink, 500);
 }
 
-function generatePost(postData) {
-  // Create the main post element
-  const postElement = document.createElement("article");
-  const did = postData.doc_id ?? "0";
-  postElement.classList.add("doc_id_" + did, "has_image");
-  postElement.id = "r" + (postData.num ?? did);
-  postElement.dataset.board = postData.board.shortname;
-  postElement.dataset.docId = postData.doc_id;
-
-  // Create the post header
-  const headerElement = document.createElement("header");
-  const postDataElement = document.createElement("div");
-  postDataElement.classList.add("post_data");
-
-  // Add the post controls
-  const postControlsElement = document.createElement("div");
-  postControlsElement.classList.add(
-    "post_mobile_controls_collapse",
-    "dropdown"
-  );
-
-  const controlsToggleButton = document.createElement("button");
-  controlsToggleButton.dataset.toggle = "dropdown";
-  controlsToggleButton.classList.add("btnr", "parent");
-  const controlsToggleIcon = document.createElement("i");
-  controlsToggleIcon.classList.add("icon-th-list");
-  controlsToggleButton.appendChild(controlsToggleIcon);
-
-  const controlsDropdown = document.createElement("ul");
-  controlsDropdown.classList.add("dropdown-menu");
-  controlsDropdown.setAttribute("role", "menu");
-
-  // Add the report link
-  const reportLink = document.createElement("li");
-  const reportAnchor = document.createElement("a");
-  reportAnchor.href = "#";
-  reportAnchor.dataset.post = postData.doc_id;
-  reportAnchor.dataset.postId = postData.num;
-  reportAnchor.dataset.board = postData.board.shortname;
-  reportAnchor.dataset.controlsModal = "post_tools_modal";
-  reportAnchor.dataset.backdrop = "true";
-  reportAnchor.dataset.keyboard = "true";
-  reportAnchor.dataset.function = "report";
-  reportAnchor.textContent = "Report";
-  reportLink.appendChild(reportAnchor);
-
-  // Add the media controls
-  const mediaControlsHeader = document.createElement("li");
-  mediaControlsHeader.classList.add("nav-header");
-  mediaControlsHeader.textContent = "Media";
-
-  if (postData.media) {
-    const viewSameLink = document.createElement("li");
-    const viewSameAnchor = document.createElement("a");
-    viewSameAnchor.href =
-      "https://desuarchive.org/" +
-      postData.board.shortname +
-      "/search/image/" +
-      postData.media?.safe_media_hash;
-    viewSameAnchor.textContent = "View Same";
-    viewSameLink.appendChild(viewSameAnchor);
-    const googleLink = document.createElement("li");
-    const googleAnchor = document.createElement("a");
-    googleAnchor.href =
-      "https://www.google.com/searchbyimage?image_url=" +
-      postData.media.thumb_link;
-    googleAnchor.setAttribute("target", "_blank");
-    googleAnchor.textContent = "Google";
-    googleLink.appendChild(googleAnchor);
-
-    // Add more media control links...
-
-    const downloadLink = document.createElement("li");
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.href = postData.media.media_link;
-    downloadAnchor.download = postData.media.media_filename_processed;
-    const downloadIcon = document.createElement("i");
-    downloadIcon.classList.add("icon-download-alt");
-    downloadAnchor.appendChild(downloadIcon);
-    downloadAnchor.appendChild(document.createTextNode(" Download"));
-    downloadLink.appendChild(downloadAnchor);
-
-    // Assemble the controls dropdown
-    //controlsDropdown.appendChild(reportLink);
-    controlsDropdown.appendChild(mediaControlsHeader);
-    controlsDropdown.appendChild(viewSameLink);
-    controlsDropdown.appendChild(googleLink);
-    // Add more media control links to the dropdown...
-    controlsDropdown.appendChild(downloadLink);
-  }
-  postControlsElement.appendChild(controlsToggleButton);
-  postControlsElement.appendChild(controlsDropdown);
-
-  // Add the post author and timestamp
-  const authorElement = document.createElement("span");
-  authorElement.classList.add("post_poster_data");
-  const authorNameElement = document.createElement("span");
-  authorNameElement.classList.add("post_author");
-  authorNameElement.textContent = postData.name_processed;
-  const timestampElement = document.createElement("span");
-  timestampElement.classList.add("time_wrap");
-  const timestampAnchor = document.createElement("time");
-  timestampAnchor.setAttribute(
-    "datetime",
-    new Date(postData.timestamp * 1000).toISOString()
-  );
-  timestampAnchor.dataset.originalTitle = postData.fourchan_date;
-  timestampAnchor.textContent = new Date(
-    postData.timestamp * 1000
-  ).toLocaleString();
-  authorElement.appendChild(authorNameElement);
-  authorElement.appendChild(timestampElement.appendChild(timestampAnchor));
-
-  // Add the post ID and quote link
-  const postIdElement = document.createElement("a");
-  postIdElement.href =
-    "https://desuarchive.org/" +
-    postData.board.shortname +
-    "/thread/" +
-    postData.thread_num +
-    "/#" +
-    postData.num;
-  postIdElement.dataset.post = postData.num;
-  postIdElement.dataset.function = "highlight";
-  postIdElement.title = "Link to this post";
-  postIdElement.textContent = "No.";
-  const quoteLink = document.createElement("a");
-  quoteLink.href =
-    "https://desuarchive.org/" +
-    postData.board.shortname +
-    "/thread/" +
-    postData.thread_num +
-    "/#q" +
-    postData.num;
-  quoteLink.dataset.post = postData.num;
-  quoteLink.title = "Reply to this post";
-  quoteLink.classList.add("postQuote");
-  quoteLink.textContent = postData.num;
-
-  // Assemble the post header
-  postDataElement.appendChild(postControlsElement);
-  postDataElement.appendChild(authorElement);
-  postDataElement.appendChild(postIdElement);
-  postDataElement.appendChild(quoteLink);
-  headerElement.appendChild(postDataElement);
-
-  // Add the post content
-  const postContentElement = document.createElement("div");
-  postContentElement.classList.add("text");
-  postContentElement.innerHTML = postData.comment_processed;
-
-  // Add the backlink list
-  const backlinkListElement = document.createElement("div");
-  backlinkListElement.classList.add("backlink_list");
-  backlinkListElement.innerHTML =
-    'Quoted By: <span class="post_backlink" data-post="' +
-    postData.num +
-    '" id="p_b' +
-    postData.num +
-    '"></span><button class="OP-button" style="height: 0px; border-radius: 50%; color: white; background: rgb(34, 0, 68);">OP</button>';
-
-  // Assemble the complete post element
-  postElement.appendChild(headerElement);
-  postElement.appendChild(postContentElement);
-  postElement.appendChild(backlinkListElement);
-
-  return $(postElement);
-}
-const generatePostElem = async (postData) => {
-  var postElement = generatePost(postData);
-
-  console.log("generatePostElem - postData:", postData);
-
-  // Check if postData and media exist before trying to access them
-  if (postData && postData.media && postData.media.media_link) {
-    try {
-      console.log("Attempting to load image from:", postData.media.media_link);
-
-      // Create the image element directly without trying to fetch via proxy
-      var imageElement = $("<img>")
-        .attr("src", postData.media.media_link)
-        .css({
-          width: "auto",
-          "max-width": "100%",
-          height: "auto",
-          "max-height": "500px",
-          display: "block",
-        })
-        .addClass("post-image");
-
-      // Add error handling for the image
-      imageElement.on("error", function () {
-        console.error("Image failed to load:", postData.media.media_link);
-
-        // Try alternative URLs if the original fails
-        const originalSrc = postData.media.media_link;
-        let newSrc = originalSrc;
-
-        // Try different domain variations
-        if (originalSrc.includes("arch-img.b4k.dev")) {
-          newSrc = originalSrc.replace("arch-img.b4k.dev", "b4k.co/media");
-        } else if (originalSrc.includes("is2.4chan.org")) {
-          newSrc = originalSrc.replace("is2.4chan.org", "i.4cdn.org");
-        } else if (originalSrc.includes("is.4chan.org")) {
-          newSrc = originalSrc.replace("is.4chan.org", "i.4cdn.org");
-        }
-
-        if (newSrc !== originalSrc) {
-          console.log("Trying alternative image source:", newSrc);
-          $(this).attr("src", newSrc);
-        }
-      });
-
-      // Add the image container and image
-      let cont = postElement
-        .find(".text")
-        .before('<div class="thread_image_box"></div>');
-      postElement.find(".thread_image_box").prepend(imageElement);
-
-      console.log("Image element added to post:", imageElement);
-    } catch (error) {
-      console.error("Error creating image element:", error);
-    }
-  } else if (postData && postData.media_link) {
-    // Handle case where media_link is directly on postData (different structure)
-    try {
-      console.log(
-        "Attempting to load image from direct media_link:",
-        postData.media_link
-      );
-
-      var imageElement = $("<img>")
-        .attr("src", postData.media_link)
-        .css({
-          width: "auto",
-          "max-width": "100%",
-          height: "auto",
-          "max-height": "500px",
-          display: "block",
-        })
-        .addClass("post-image");
-
-      // Add error handling for the image
-      imageElement.on("error", function () {
-        console.error("Image failed to load:", postData.media_link);
-
-        // Try alternative URLs if the original fails
-        const originalSrc = postData.media_link;
-        let newSrc = originalSrc;
-
-        // Try different domain variations
-        if (originalSrc.includes("arch-img.b4k.dev")) {
-          newSrc = originalSrc.replace("arch-img.b4k.dev", "b4k.co/media");
-        } else if (originalSrc.includes("is2.4chan.org")) {
-          newSrc = originalSrc.replace("is2.4chan.org", "i.4cdn.org");
-        } else if (originalSrc.includes("is.4chan.org")) {
-          newSrc = originalSrc.replace("is.4chan.org", "i.4cdn.org");
-        }
-
-        if (newSrc !== originalSrc) {
-          console.log("Trying alternative image source:", newSrc);
-          $(this).attr("src", newSrc);
-        }
-      });
-
-      // Add the image container and image
-      let cont = postElement
-        .find(".text")
-        .before('<div class="thread_image_box"></div>');
-      postElement.find(".thread_image_box").prepend(imageElement);
-
-      console.log("Image element added to post:", imageElement);
-    } catch (error) {
-      console.error("Error creating image element:", error);
-    }
-  } else if (postData && postData.image_src) {
-    // Handle case where image_src is directly on postData (different structure)
-    try {
-      console.log(
-        "Attempting to load image from image_src:",
-        postData.image_src
-      );
-
-      var imageElement = $("<img>")
-        .attr("src", postData.image_src)
-        .css({
-          width: "auto",
-          "max-width": "100%",
-          height: "auto",
-          "max-height": "500px",
-          display: "block",
-        })
-        .addClass("post-image");
-
-      // Add error handling for the image
-      imageElement.on("error", function () {
-        console.error("Image failed to load:", postData.image_src);
-
-        // Try alternative URLs if the original fails
-        const originalSrc = postData.image_src;
-        let newSrc = originalSrc;
-
-        // Try different domain variations
-        if (originalSrc.includes("arch-img.b4k.dev")) {
-          newSrc = originalSrc.replace("arch-img.b4k.dev", "b4k.co/media");
-        } else if (originalSrc.includes("is2.4chan.org")) {
-          newSrc = originalSrc.replace("is2.4chan.org", "i.4cdn.org");
-        } else if (originalSrc.includes("is.4chan.org")) {
-          newSrc = originalSrc.replace("is.4chan.org", "i.4cdn.org");
-        }
-
-        if (newSrc !== originalSrc) {
-          console.log("Trying alternative image source:", newSrc);
-          $(this).attr("src", newSrc);
-        }
-      });
-
-      // Add the image container and image
-      let cont = postElement
-        .find(".text")
-        .before('<div class="thread_image_box"></div>');
-      postElement.find(".thread_image_box").prepend(imageElement);
-
-      console.log("Image element added to post:", imageElement);
-    } catch (error) {
-      console.error("Error creating image element:", error);
-    }
-  } else {
-    // Check if there's an image in the HTML structure already
-    console.log(
-      "No media information in postData, checking for existing images"
-    );
-
-    // Look for existing images in the post HTML
-    const existingImages = postElement.find(
-      "img.post_image, img.smallImage, img.thread_image"
-    );
-    if (existingImages.length > 0) {
-      console.log("Found existing images in post HTML:", existingImages.length);
-
-      // Clone the first image and add it to the thread_image_box
-      const firstImage = existingImages.first();
-      const imageSrc = firstImage.attr("src") || firstImage.data("src");
-
-      if (imageSrc) {
-        console.log("Using existing image source:", imageSrc);
-
-        var imageElement = $("<img>")
-          .attr("src", imageSrc)
-          .css({
-            width: "auto",
-            "max-width": "100%",
-            height: "auto",
-            "max-height": "500px",
-            display: "block",
-          })
-          .addClass("post-image");
-
-        // Add the image container and image
-        let cont = postElement
-          .find(".text")
-          .before('<div class="thread_image_box"></div>');
-        postElement.find(".thread_image_box").prepend(imageElement);
-
-        console.log("Existing image added to post:", imageElement);
-      }
-    } else {
-      console.warn("No image found in post data or HTML");
-    }
-  }
-
-  return postElement;
-};
 var ops = [];
 var opsId = [];
 var postsObj = {};
-// Function to get operation by opsId
-const fetchOp = async (id) => {
-  console.log("fetchOp called with id:", id);
-
-  // Create an object to map opsId to ops
-  const opsMap = opsId.reduce((acc, id, index) => {
-    acc[id] = ops[index];
-    return acc;
-  }, {});
-
-  // Get the OP data
-  const opData = opsMap[id];
-  console.log("OP data found:", opData);
-
-  // If we're on a search page, we might need to extract the image from the DOM
-  if (search && (!opData || !opData.media)) {
-    console.log("On search page, trying to extract image from DOM");
-
-    // Try to find the post in the DOM
-    const postElement = $(`#${id}`);
-    if (postElement.length > 0) {
-      console.log("Found post element in DOM:", postElement);
-
-      // Look for images in the post
-      const images = postElement.find(
-        "img.post_image, img.smallImage, img.thread_image"
-      );
-      if (images.length > 0) {
-        console.log("Found images in post:", images.length);
-
-        // Get the first image source
-        const firstImage = images.first();
-        const imageSrc = firstImage.attr("src") || firstImage.data("src");
-
-        if (imageSrc) {
-          console.log("Found image source:", imageSrc);
-
-          // If we have opData, add the image to it
-          if (opData) {
-            if (!opData.media) {
-              opData.media = {};
-            }
-            opData.media.media_link = imageSrc;
-          } else {
-            // Create a minimal opData with the image
-            const newOpData = {
-              media_link: imageSrc,
-              // Add other necessary properties from the DOM
-              board: { shortname: postElement.data("board") || "v" },
-              thread_num: postElement.data("thread-num") || "0",
-              num: id,
-            };
-
-            // Add the text content if available
-            const textElement = postElement.find(".text");
-            if (textElement.length > 0) {
-              newOpData.comment_processed = textElement.html();
-            }
-
-            return await generatePostElem(newOpData);
-          }
-        }
-      }
-    }
-  }
-
-  // If we have opData, generate the post element
-  if (opData) {
-    return await generatePostElem(opData);
-  }
-
-  console.warn("No OP data found for id:", id);
-  return "";
-};
-const fetchPostElem = async (id) => {
-  return (await generatePostElem(postsObj[id])) || "";
-}; // In your fetchData function, remove this line:
-// xhr.setRequestHeader('Referer', currentUrl);
 
 // Get the main thread
 const getMainThread = () => {
@@ -2694,8 +2505,8 @@ const fetchThread = async (board, threadId) => {
     console.log(
       `Adding ${thread.posts.length} posts from thread ${threadId} to graph`
     );
-    const op = String(thread.op.num)
-        postGraph.addPost(op, thread.op);
+    const op = String(thread.op.num);
+    postGraph.addPost(op, thread.op);
     for (const post of Object.values(thread.posts)) {
       const postId = String(post.num);
 
@@ -2703,20 +2514,20 @@ const fetchThread = async (board, threadId) => {
       if (postGraph.nodes.has(postId)) {
         continue;
       }
-      
+
       // Extract ALL parent IDs from post content
       const parentIds = extractParentIds(post.comment);
-      
+
       // Filter to only include parents that exist in this thread
       const validParentIds = parentIds.filter(
-          (pid) =>
-            pid !== postId && // Don't self-reference
+        (pid) =>
+          pid !== postId && // Don't self-reference
           Object.values(thread.posts).find((p) => String(p.num) === pid)
-        );
-        
+      );
+
       // Add post to graph with ALL valid parents
       postGraph.addPost(postId, post, validParentIds);
-      
+
       const node = postGraph.nodes.get(postId);
 
       // If no parents found and not OP, connect to OP as fallback
@@ -2843,7 +2654,7 @@ function addExpandButtonToPost(post) {
         $btn.removeClass("expanding").text("Expanded").addClass("disabled");
       }, 1000);
     });
- 
+
     $postControls.append($expandBtn);
     $postControls.append($expandBtn2);
   }
@@ -2851,7 +2662,11 @@ function addExpandButtonToPost(post) {
 var updS = () => {};
 
 // Enhanced expandAllQuotes with graph traversal
-const expandAllQuotes = async (postElement, includeOP = true, around = false) => {
+const expandAllQuotes = async (
+  postElement,
+  includeOP = true,
+  around = false
+) => {
   if (!postElement || !postElement.id) {
     console.warn("Invalid post element");
     return;
@@ -2908,7 +2723,9 @@ const expandAllQuotes = async (postElement, includeOP = true, around = false) =>
   $postWrapper.append($expandedContainer);
 
   try {
-    const p = around ? currentPostId : postGraph.findPenultimateRoot(currentPostId)
+    const p = around
+      ? currentPostId
+      : postGraph.findPenultimateRoot(currentPostId);
     const replyChain = postGraph.getReplyChainFromPost(p, includeOP, 30000);
     await displayReplyChain(replyChain, $expandedContainer);
   } catch (error) {
@@ -2920,86 +2737,118 @@ const expandAllQuotes = async (postElement, includeOP = true, around = false) =>
 };
 // Display reply chain in BFS order
 async function displayReplyChain(replyChain, $container) {
-  const $status = $('<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>');
+  const $status = $(
+    '<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>'
+  );
   $container.append($status);
-  
+
   let processed = 0;
-  
-  for (const {id, level, data, replies, parents, quotedParents, parentCount, quotedParentCount, isOP} of replyChain) {
-      try {
-          // Use quotedParents if available, fallback to extracting from content
-          const displayParents = quotedParents && quotedParents.length > 0 
-              ? quotedParents 
-              : extractParentIds(data?.comment || data?.com || "").filter(pid => 
-                  replyChain.some(item => item.id === pid)
-              );
-          
-          // Create level indicator with better multi-parent info
-          const $levelHeader = $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${isOP ? '#773311' : '#555'};">
-              ${isOP ? 'OP' : `L${level}`} (${replies.length}↓${displayParents.length}↑)
-              ${displayParents.length > 0 ? ` ← [${displayParents.join(', ')}]` : ''}
-              ${parentCount !== displayParents.length ? ` (graph: ${parentCount} parents)` : ''}
+
+  for (const {
+    id,
+    level,
+    data,
+    replies,
+    parents,
+    quotedParents,
+    parentCount,
+    quotedParentCount,
+    isOP,
+  } of replyChain) {
+    try {
+      // Use quotedParents if available, fallback to extracting from content
+      const displayParents =
+        quotedParents && quotedParents.length > 0
+          ? quotedParents
+          : extractParentIds(data?.comment || data?.com || "").filter((pid) =>
+              replyChain.some((item) => item.id === pid)
+            );
+
+      // Create level indicator with better multi-parent info
+      const $levelHeader =
+        $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${
+          isOP ? "#773311" : "#555"
+        };">
+              ${isOP ? "OP" : `L${level}`} (${replies.length}↓${
+          displayParents.length
+        }↑)
+              ${
+                displayParents.length > 0
+                  ? ` ← [${displayParents.join(", ")}]`
+                  : ""
+              }
+              ${
+                parentCount !== displayParents.length
+                  ? ` (graph: ${parentCount} parents)`
+                  : ""
+              }
           </div>`);
-          $container.append($levelHeader);
-          
-          // Create post container with level-based indentation
-          const $postContainer = $('<div class="chain-post"></div>');
-          $postContainer.css({
-              'margin': '2px 0 5px ' + (isOP ? 0 : Math.min(level * 15, 60)) + 'px', // Cap max indentation
-              'border-left': level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : 'none', // Thicker border for deeper levels
-              'padding-left': level > 0 && !isOP ? '5px' : '0',
-              'border': isOP ? '2px solid #773311' : '1px solid #000',
-              'background': isOP ? '#fff8f0' : level > 3 ? '#f0f0f0' : '#fafafa', // Different bg for deep levels
-              'font-size': '13px'
-          });
-          
-          // Add hide/unhide button
-          const $toggleBtn = $('<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>');
-          
-          if (data) {
-              const postElement = createPostElement(data);
-              const $postContent = $('<div class="post-content"></div>').html(postElement);
-              
-              $toggleBtn.click(() => {
-                  if ($postContent.is(':visible')) {
-                      $postContent.hide();
-                      $toggleBtn.text('[+]');
-                  } else {
-                      $postContent.show();
-                      $toggleBtn.text('[−]');
-                  }
-              });
-              
-              $postContainer.append($toggleBtn);
-              $postContainer.append($postContent);
-              
-              // Process the post
-              setTimeout(() => {
-                  const $createdPost = $postContainer.find('article.post');
-                  if ($createdPost.length > 0) {
-                      $createdPost.css({
-                          'margin': '2px',
-                          'padding': '3px',
-                          'font-size': '12px'
-                      });
-                      processPost($createdPost[0]).catch(console.error);
-                  }
-              }, 50 * processed);
+      $container.append($levelHeader);
+
+      // Create post container with level-based indentation
+      const $postContainer = $('<div class="chain-post"></div>');
+      $postContainer.css({
+        margin: "2px 0 5px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px", // Cap max indentation
+        "border-left":
+          level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none", // Thicker border for deeper levels
+        "padding-left": level > 0 && !isOP ? "5px" : "0",
+        border: isOP ? "2px solid #773311" : "1px solid #000",
+        background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa", // Different bg for deep levels
+        "font-size": "13px",
+      });
+
+      // Add hide/unhide button
+      const $toggleBtn = $(
+        '<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>'
+      );
+
+      if (data) {
+        const postElement = createPostElement(data);
+        const $postContent = $('<div class="post-content"></div>').html(
+          postElement
+        );
+
+        $toggleBtn.click(() => {
+          if ($postContent.is(":visible")) {
+            $postContent.hide();
+            $toggleBtn.text("[+]");
           } else {
-              $postContainer.append($toggleBtn);
-              $postContainer.append(`<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`);
+            $postContent.show();
+            $toggleBtn.text("[−]");
           }
-          
-          $container.append($postContainer);
-          processed++;
-          
-          $status.text(`${processed}/${replyChain.length} posts`);
-          
-      } catch (error) {
-          console.error(`Error displaying post ${id}:`, error);
+        });
+
+        $postContainer.append($toggleBtn);
+        $postContainer.append($postContent);
+
+        // Process the post
+        setTimeout(() => {
+          const $createdPost = $postContainer.find("article.post");
+          if ($createdPost.length > 0) {
+            $createdPost.css({
+              margin: "2px",
+              padding: "3px",
+              "font-size": "12px",
+            });
+            processPost($createdPost[0]).catch(console.error);
+          }
+        }, 50 * processed);
+      } else {
+        $postContainer.append($toggleBtn);
+        $postContainer.append(
+          `<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`
+        );
       }
+
+      $container.append($postContainer);
+      processed++;
+
+      $status.text(`${processed}/${replyChain.length} posts`);
+    } catch (error) {
+      console.error(`Error displaying post ${id}:`, error);
+    }
   }
-  
+
   $status.text(`Complete: ${processed} posts`);
 }
 function getContinentColor(country) {
@@ -3161,7 +3010,7 @@ const processPost = async (post) => {
   try {
     // Use your existing fetchRepliesWithRetry function
     let replies = await fetchRepliesWithRetry(aElem);
-   
+
     if (!replies || replies.length === 0) {
       console.log(`No replies found for post ${id}`);
       addExpandButtonToPost(post);
@@ -3194,7 +3043,6 @@ const processPost = async (post) => {
     // Add individual expand button to post controls
     addExpandButtonToPost(post);
 
-
     console.log("Replies: ", replies, repliesElems);
     processedPosts++;
   } catch (err) {
@@ -3205,7 +3053,8 @@ const processPost = async (post) => {
 };
 // Function to enable/disable auto-expansion
 function toggleAutoExpand() {
-    settings.UserSettings.autoExpand.value = !settings.UserSettings.autoExpand.value;
+  settings.UserSettings.autoExpand.value =
+    !settings.UserSettings.autoExpand.value;
   console.log(`Auto-expansion ${autoExpandEnabled ? "enabled" : "disabled"}`);
 
   // Add visual indicator
@@ -3220,8 +3069,13 @@ function toggleAutoExpand() {
     );
   } else {
     $indicator
-      .css("background", settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336")
-      .text(`Auto-expand: ${settings.UserSettings.autoExpand.value ? "ON" : "OFF"}`);
+      .css(
+        "background",
+        settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336"
+      )
+      .text(
+        `Auto-expand: ${settings.UserSettings.autoExpand.value ? "ON" : "OFF"}`
+      );
   }
 
   // Hide indicator after 3 seconds
@@ -8391,145 +8245,162 @@ $(document).ready(function () {
         let $this = $(this);
         let $button = $('<button class="OP-button">OP</button>');
         $button.css({
-            height: $this.height(),
-            "border-radius": "50%",
-            color: "white",
-            background: "#220044",
-            "user-select": "none",
-            "-webkit-user-select": "none",
-            "-moz-user-select": "none",
-            "-ms-user-select": "none"
+          height: $this.height(),
+          "border-radius": "50%",
+          color: "white",
+          background: "#220044",
+          "user-select": "none",
+          "-webkit-user-select": "none",
+          "-moz-user-select": "none",
+          "-ms-user-select": "none",
         });
         $this.after($button);
 
         $button.click(async function () {
-            console.log("OP button clicked");
-            
-            let parent = $this.parent();
-            let $inlineOp = parent.next(".inline-op");
-        
-            if (!$inlineOp.length) {
-                try {
-                    let opData = null;
-                    let $opElem = null;
-                    
-                    if (search) {
-                        // SEARCH PAGE: Use DFS graph method
-                        console.log("Search page - using DFS to find OP");
-                        
-                        const currentPostId = $this.closest('article.post')[0].id.replace(/^r/, '');
-                        
-                        // Ensure post is in graph
-                        if (!postGraph.nodes.has(currentPostId)) {
-                            const $post = $this.closest('article.post');
-                            let board = $post.data('board');
-                            if (!board) {
-                                const currentUrl = window.location.pathname;
-                                const boardMatch = currentUrl.match(/\/([^\/]+)\//);
-                                board = boardMatch ? boardMatch[1] : 'int';
-                            }
-                            
-                            const currentPost = await fetchPost(board, currentPostId);
-                            if (currentPost && !currentPost.error) {
-                                const threadId = currentPost.thread_num || currentPost.resto || currentPostId;
-                                await fetchThread(board, threadId);
-                            }
-                        }
-                        
-                        // DFS to find OP
-                        const opId = postGraph.findOP(currentPostId);
-                        const opNode = postGraph.nodes.get(opId);
-                        
-                        if (!opNode || !opNode.data) {
-                            throw new Error(`OP data not found for ID: ${opId}`);
-                        }
-                        
-                        console.log("Found OP via DFS:", opId);
-                        opData = opNode.data;
-                        $opElem = $(createPostElement(opData));
-                        
-                    } else {
-                        // REGULAR THREAD PAGE: Use existing getOp() function
-                        console.log("Regular thread page - using getOp()");
-                        
-                        const [opId, opElement] = getOp();
-                        if (!opElement) {
-                            throw new Error("getOp() returned null");
-                        }
-                        
-                        console.log("Found OP via getOp():", opId);
-                        $opElem = $(opElement).clone();
-                    }
-                    
-                    if (!$opElem || $opElem.length === 0) {
-                        throw new Error("No OP element created");
-                    }
-                    
-                    // Clean up the OP element (same for both methods)
-                    $opElem.find("aside, #reply, .thread_tools_bottom, .js_hook_realtimethread").remove();
-                    $opElem.find(".backlink_list").remove();
-                    $opElem.css("border", "2px solid #773311");
-                    
-                    // Create and append inline OP
-                    let newInlineOp = $('<div class="inline-op"></div>')[0];
-                    parent.after(newInlineOp);
-                    $(newInlineOp).append($opElem);
-                    
-                    // Process the OP (same for both methods)
-                    setTimeout(() => {
-                        console.log("Processing inline OP");
-                        const $inlineOpElement = $(newInlineOp);
-                        
-                        inlineImages($inlineOpElement);
-                        
-                        const $createdPost = $inlineOpElement.find('article.post');
-                        if ($createdPost.length > 0) {
-                            processPost($createdPost[0]).catch(console.error);
-                        }
-                        
-                        if (settings.UserSettings.inlineImages?.suboptions?.autoplayGifs && 
-                            !settings.UserSettings.inlineImages.suboptions.autoplayGifs.value) {
-                            pauseGifs($inlineOpElement.find("img"));
-                        }
-                    }, 100);
-                    
-                } catch (error) {
-                    console.error("Error creating inline OP:", error);
-                    
-                    // Ultimate fallback - try the old fetchOp method
-                    try {
-                        console.log("Trying fallback fetchOp method");
-                        const currentPostId = $this.closest('article.post')[0].id.replace(/^r/, '');
-                        let opElem = await fetchOp(currentPostId);
-                        
-                        if (opElem) {
-                            let $opElem = $(opElem);
-                            $opElem.find("aside, #reply, .thread_tools_bottom, .js_hook_realtimethread").remove();
-                            $opElem.find(".backlink_list").remove();
-                            $opElem.css("border", "2px solid #773311");
-                            
-                            let newInlineOp = $('<div class="inline-op"></div>')[0];
-                            parent.after(newInlineOp);
-                            $(newInlineOp).append($opElem);
-                            
-                            setTimeout(() => {
-                                const $inlineOpElement = $(newInlineOp);
-                                inlineImages($inlineOpElement);
-                                
-                                const $createdPost = $inlineOpElement.find('article.post');
-                                if ($createdPost.length > 0) {
-                                    processPost($createdPost[0]).catch(console.error);
-                                }
-                            }, 100);
-                        }
-                    } catch (fallbackError) {
-                        console.error("All OP methods failed:", fallbackError);
-                    }
+          console.log("OP button clicked");
+
+          let parent = $this.parent();
+          let $inlineOp = parent.next(".inline-op");
+
+          if (!$inlineOp.length) {
+            try {
+              let opData = null;
+              let $opElem = null;
+
+              if (search) {
+                // SEARCH PAGE: Use DFS graph method
+                console.log("Search page - using DFS to find OP");
+
+                const currentPostId = $this
+                  .closest("article.post")[0]
+                  .id.replace(/^r/, "");
+
+                // Ensure post is in graph
+                if (!postGraph.nodes.has(currentPostId)) {
+                  const $post = $this.closest("article.post");
+                  let board = $post.data("board");
+                  if (!board) {
+                    const currentUrl = window.location.pathname;
+                    const boardMatch = currentUrl.match(/\/([^\/]+)\//);
+                    board = boardMatch ? boardMatch[1] : "int";
+                  }
+
+                  const currentPost = await fetchPost(board, currentPostId);
+                  if (currentPost && !currentPost.error) {
+                    const threadId =
+                      currentPost.thread_num ||
+                      currentPost.resto ||
+                      currentPostId;
+                    await fetchThread(board, threadId);
+                  }
                 }
-            } else {
-                // Toggle - remove existing inline OP
-                $inlineOp.remove();
+
+                // DFS to find OP
+                const opId = postGraph.findOP(currentPostId);
+                const opNode = postGraph.nodes.get(opId);
+
+                if (!opNode || !opNode.data) {
+                  throw new Error(`OP data not found for ID: ${opId}`);
+                }
+
+                console.log("Found OP via DFS:", opId);
+                opData = opNode.data;
+                $opElem = $(createPostElement(opData));
+              } else {
+                // REGULAR THREAD PAGE: Use existing getOp() function
+                console.log("Regular thread page - using getOp()");
+
+                const [opId, opElement] = getOp();
+                if (!opElement) {
+                  throw new Error("getOp() returned null");
+                }
+
+                console.log("Found OP via getOp():", opId);
+                $opElem = $(opElement).clone();
+              }
+
+              if (!$opElem || $opElem.length === 0) {
+                throw new Error("No OP element created");
+              }
+
+              // Clean up the OP element (same for both methods)
+              $opElem
+                .find(
+                  "aside, #reply, .thread_tools_bottom, .js_hook_realtimethread"
+                )
+                .remove();
+              $opElem.find(".backlink_list").remove();
+              $opElem.css("border", "2px solid #773311");
+
+              // Create and append inline OP
+              let newInlineOp = $('<div class="inline-op"></div>')[0];
+              parent.after(newInlineOp);
+              $(newInlineOp).append($opElem);
+
+              // Process the OP (same for both methods)
+              setTimeout(() => {
+                console.log("Processing inline OP");
+                const $inlineOpElement = $(newInlineOp);
+
+                inlineImages($inlineOpElement);
+
+                const $createdPost = $inlineOpElement.find("article.post");
+                if ($createdPost.length > 0) {
+                  processPost($createdPost[0]).catch(console.error);
+                }
+
+                if (
+                  settings.UserSettings.inlineImages?.suboptions
+                    ?.autoplayGifs &&
+                  !settings.UserSettings.inlineImages.suboptions.autoplayGifs
+                    .value
+                ) {
+                  pauseGifs($inlineOpElement.find("img"));
+                }
+              }, 100);
+            } catch (error) {
+              console.error("Error creating inline OP:", error);
+
+              // Ultimate fallback - try the old fetchOp method
+              try {
+                console.log("Trying fallback fetchOp method");
+                const currentPostId = $this
+                  .closest("article.post")[0]
+                  .id.replace(/^r/, "");
+                let opElem = await fetchOp(currentPostId);
+
+                if (opElem) {
+                  let $opElem = $(opElem);
+                  $opElem
+                    .find(
+                      "aside, #reply, .thread_tools_bottom, .js_hook_realtimethread"
+                    )
+                    .remove();
+                  $opElem.find(".backlink_list").remove();
+                  $opElem.css("border", "2px solid #773311");
+
+                  let newInlineOp = $('<div class="inline-op"></div>')[0];
+                  parent.after(newInlineOp);
+                  $(newInlineOp).append($opElem);
+
+                  setTimeout(() => {
+                    const $inlineOpElement = $(newInlineOp);
+                    inlineImages($inlineOpElement);
+
+                    const $createdPost = $inlineOpElement.find("article.post");
+                    if ($createdPost.length > 0) {
+                      processPost($createdPost[0]).catch(console.error);
+                    }
+                  }, 100);
+                }
+              } catch (fallbackError) {
+                console.error("All OP methods failed:", fallbackError);
+              }
             }
+          } else {
+            // Toggle - remove existing inline OP
+            $inlineOp.remove();
+          }
         });
       });
     });
@@ -8595,10 +8466,8 @@ $(document).ready(function () {
           for (let i = 0; i < totalPosts; i++) {
             await processPost(posts[i]); // Process each post
             // Auto-expand if enabled and this is first page load
-            if (
-                settings.UserSettings.autoExpand.value
-            ) {
-              await expandAllQuotes(posts[i])
+            if (settings.UserSettings.autoExpand.value) {
+              await expandAllQuotes(posts[i]);
             }
             await delay(wait); // Delay between each request to avoid too many requests
           }
@@ -8614,6 +8483,6 @@ $(document).ready(function () {
       }
     }
     // Call the async function to start processing posts
-    processPosts()
+    processPosts();
   }
 });
