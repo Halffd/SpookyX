@@ -1065,69 +1065,213 @@ findPenultimateRoot(postId) {
 }
 // Modified BFS that starts from a specific post, with OP shown separately
 getReplyChainFromPost(startPostId, includeOP = true, maxPosts = 50) {
-    const result = [];
-    const visited = new Set();
-    
-    // Step 1: Add OP if requested
-    if (includeOP) {
-        const opId = this.findOP(startPostId);
-        const opNode = this.nodes.get(opId);
-        
-        if (opNode) {
-            result.push({
-                id: opId,
-                level: 0,
-                data: opNode.data,
-                replies: Array.from(opNode.replies),
-                parents: Array.from(opNode.parents),
-                parentCount: opNode.parents.size,
-                isOP: true
-            });
-            visited.add(opId);
-        }
-    }
-    
-    // Step 2: BFS from the current post (not OP)
-    const queue = [{ id: startPostId, level: 1 }]; // Start at level 1
-    let addedPosts = 0;
-    
-    while (queue.length > 0 && addedPosts < maxPosts) {
-        const { id, level } = queue.shift();
-        
-        if (visited.has(id)) continue;
-        visited.add(id);
-        
-        const node = this.nodes.get(id);
-        if (!node) continue;
-        
-        result.push({
-            id: id,
-            level: level,
-            data: node.data,
-            replies: Array.from(node.replies),
-            parents: Array.from(node.parents),
-            parentCount: node.parents.size,
-            isOP: false
-        });
-        
-        addedPosts++;
-        
-        // Add replies to queue
-        const sortedReplies = Array.from(node.replies).sort(
-            (a, b) => parseInt(a) - parseInt(b)
-        );
-        
-        for (const replyId of sortedReplies) {
-            if (!visited.has(replyId)) {
-                queue.push({ id: replyId, level: level + 1 });
-            }
-        }
-    }
-    
-    console.log(`Reply chain from ${startPostId}: ${result.length} posts (${addedPosts} replies + ${includeOP ? 1 : 0} OP)`);
-    return result;
+  const result = [];
+  const visited = new Set();
+  const levelMap = new Map();
+  const toProcess = new Set(); // Track all posts we need to include
+  
+  // Step 1: Add OP if requested
+  let opId = null;
+  if (includeOP) {
+      opId = this.findOP(startPostId);
+      const opNode = this.nodes.get(opId);
+      
+      if (opNode) {
+          result.push({
+              id: opId,
+              level: 0,
+              data: opNode.data,
+              replies: Array.from(opNode.replies),
+              parents: Array.from(opNode.parents),
+              quotedParents: [],
+              parentCount: opNode.parents.size,
+              quotedParentCount: 0,
+              isOP: true
+          });
+          visited.add(opId);
+          levelMap.set(opId, 0);
+      }
+  }
+  
+  // Step 2: Collect ALL posts that should be included
+  const collectRelatedPosts = (postId, maxDepth = 3) => {
+      const queue = [{ id: postId, depth: 0 }];
+      const seen = new Set();
+      
+      while (queue.length > 0) {
+          const { id, depth } = queue.shift();
+          
+          if (seen.has(id) || depth > maxDepth) continue;
+          seen.add(id);
+          toProcess.add(id);
+          
+          const node = this.nodes.get(id);
+          if (!node) continue;
+          
+          // Add replies
+          Array.from(node.replies).forEach(replyId => {
+              if (!seen.has(replyId)) {
+                  queue.push({ id: replyId, depth: depth + 1 });
+              }
+          });
+          
+          // Add quoted posts
+          const commentText = node.data?.comment || node.data?.com || "";
+          const quotedParents = extractParentIds(commentText || "").filter(pid => 
+              pid !== id && this.nodes.has(pid)
+          );
+          
+          quotedParents.forEach(quotedId => {
+              if (!seen.has(quotedId)) {
+                  queue.push({ id: quotedId, depth: depth + 1 });
+              }
+          });
+          
+          // Add posts that quote this one (reverse lookup)
+          for (const [nodeId, nodeData] of this.nodes.entries()) {
+              if (seen.has(nodeId)) continue;
+              
+              const nodeComment = nodeData.data?.comment || nodeData.data?.com || "";
+              const nodeQuotes = extractParentIds(nodeComment || "");
+              
+              if (nodeQuotes.includes(id)) {
+                  queue.push({ id: nodeId, depth: depth + 1 });
+              }
+          }
+      }
+  };
+  
+  // Collect related posts
+  collectRelatedPosts(startPostId);
+  
+  console.log(`Collected ${toProcess.size} related posts for ${startPostId}:`, Array.from(toProcess).sort());
+  
+  // Step 3: Process collected posts with proper level calculation
+  const getQuotedParents = (postId, commentText) => {
+      const rawQuotes = extractParentIds(commentText || "");
+      return rawQuotes.filter(pid => 
+          pid !== postId && 
+          toProcess.has(pid) // Only include quotes within our result set
+      );
+  };
+  
+  const calculateLevel = (postId, commentText) => {
+      if (levelMap.has(postId)) {
+          return levelMap.get(postId);
+      }
+      
+      const quotedParents = getQuotedParents(postId, commentText);
+      
+      if (quotedParents.length === 0) {
+          const level = postId === opId ? 0 : 1;
+          levelMap.set(postId, level);
+          return level;
+      }
+      
+      let maxParentLevel = -1;
+      let validParentLevels = 0;
+      
+      for (const parentId of quotedParents) {
+          if (levelMap.has(parentId)) {
+              maxParentLevel = Math.max(maxParentLevel, levelMap.get(parentId));
+              validParentLevels++;
+          }
+      }
+      
+      if (validParentLevels === quotedParents.length) {
+          const level = maxParentLevel + 1;
+          levelMap.set(postId, level);
+          return level;
+      }
+      
+      return null; // Level not ready yet
+  };
+  
+  // Multi-pass processing
+  const postsToProcess = Array.from(toProcess).filter(id => !visited.has(id));
+  let passes = 0;
+  const maxPasses = 4;
+  
+  while (postsToProcess.length > 0 && passes < maxPasses) {
+      const processed = [];
+      passes++;
+      
+      for (const postId of postsToProcess) {
+          if (visited.has(postId)) continue;
+          
+          const node = this.nodes.get(postId);
+          if (!node) continue;
+          
+          const commentText = node.data?.comment || node.data?.com || "";
+          const level = calculateLevel(postId, commentText);
+          
+          if (level === null) continue; // Skip this pass
+          
+          const quotedParents = getQuotedParents(postId, commentText);
+          
+          visited.add(postId);
+          processed.push(postId);
+          
+          result.push({
+              id: postId,
+              level: level,
+              data: node.data,
+              replies: Array.from(node.replies),
+              parents: Array.from(node.parents),
+              quotedParents: quotedParents,
+              parentCount: node.parents.size,
+              quotedParentCount: quotedParents.length,
+              isOP: postId === opId
+          });
+      }
+      
+      // Remove processed posts
+      processed.forEach(id => {
+          const index = postsToProcess.indexOf(id);
+          if (index > -1) postsToProcess.splice(index, 1);
+      });
+      
+      console.log(`Pass ${passes}: Processed ${processed.length} posts, ${postsToProcess.length} remaining`);
+  }
+  
+  // Process any remaining posts with default levels
+  for (const postId of postsToProcess) {
+      if (visited.has(postId)) continue;
+      
+      const node = this.nodes.get(postId);
+      if (!node) continue;
+      
+      const commentText = node.data?.comment || node.data?.com || "";
+      const quotedParents = getQuotedParents(postId, commentText);
+      
+      visited.add(postId);
+      
+      result.push({
+          id: postId,
+          level: 2, // Default level
+          data: node.data,
+          replies: Array.from(node.replies),
+          parents: Array.from(node.parents),
+          quotedParents: quotedParents,
+          parentCount: node.parents.size,
+          quotedParentCount: quotedParents.length,
+          isOP: postId === opId
+      });
+  }
+  
+  // Sort by level, then by post ID
+  result.sort((a, b) => {
+      if (a.level !== b.level) return a.level - b.level;
+      return parseInt(a.id) - parseInt(b.id);
+  });
+  
+  console.log(`Final result: ${result.length} posts`);
+  result.forEach(post => {
+      console.log(`${post.id} L${post.level}: ${post.quotedParentCount > 0 ? `quotes [${post.quotedParents.join(', ')}]` : 'no quotes'}`);
+  });
+  
+  return result;
 }
-
 // Alternative: Show conversation thread around a specific post
 getConversationAround(postId, includeOP = true, maxDepth = 3) {
     const result = [];
@@ -2485,7 +2629,7 @@ function addExpandButtonToPost(post) {
 
   if (backlinkCount > 0) {
     const $expandBtn = $(
-      '<a href="#" class="btnr parent expand-all-btn">Expand Chain (' +
+      '<a href="#" class="btnr parent expand-all-btn">Exp(' +
         backlinkCount +
         ")</a>"
     );
@@ -2502,14 +2646,33 @@ function addExpandButtonToPost(post) {
         $btn.removeClass("expanding").text("Expanded").addClass("disabled");
       }, 1000);
     });
+    const $expandBtn2 = $(
+      '<a href="#" class="btnr parent expand-around-btn">Ard(' +
+        backlinkCount +
+        ")</a>"
+    );
 
+    $expandBtn2.click(function (e) {
+      e.preventDefault();
+      const $btn = $(this);
+      if ($btn.hasClass("expanding")) return;
+
+      $btn.addClass("expanding").text("184786362 Graph...");
+      expandAllQuotes(post, false, true); // Include OP
+
+      setTimeout(() => {
+        $btn.removeClass("expanding").text("Expanded").addClass("disabled");
+      }, 1000);
+    });
+ 
     $postControls.append($expandBtn);
+    $postControls.append($expandBtn2);
   }
 }
 var updS = () => {};
 
 // Enhanced expandAllQuotes with graph traversal
-const expandAllQuotes = async (postElement, includeOP = true) => {
+const expandAllQuotes = async (postElement, includeOP = true, around = false) => {
   if (!postElement || !postElement.id) {
     console.warn("Invalid post element");
     return;
@@ -2566,7 +2729,7 @@ const expandAllQuotes = async (postElement, includeOP = true) => {
   $postWrapper.append($expandedContainer);
 
   try {
-    const p = postGraph.findPenultimateRoot(currentPostId)
+    const p = around ? currentPostId : postGraph.findPenultimateRoot(currentPostId)
     const replyChain = postGraph.getReplyChainFromPost(p, includeOP, 30000);
     await displayReplyChain(replyChain, $expandedContainer);
   } catch (error) {
@@ -2578,89 +2741,86 @@ const expandAllQuotes = async (postElement, includeOP = true) => {
 };
 // Display reply chain in BFS order
 async function displayReplyChain(replyChain, $container) {
-  const $status = $(
-    '<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>'
-  );
+  const $status = $('<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>');
   $container.append($status);
-
+  
   let processed = 0;
-
-  for (const { id, level, data, replies, parents, parentCount } of replyChain) {
-    try {
-      // Create level indicator with parent info
-      const $levelHeader =
-        $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: #555;">
-                L${level} ${
-          level === 0 ? "(OP)" : `(${replies.length}↓${parentCount || 0}↑)`
-        }
-                ${parents?.length > 0 ? ` ← [${parents.join(", ")}]` : ""}
-            </div>`);
-      $container.append($levelHeader);
-
-      // Create compact post container
-      const $postContainer = $('<div class="chain-post"></div>');
-      $postContainer.css({
-        margin: "2px 0 5px " + level * 15 + "px",
-        "border-left": level > 0 ? "1px solid #ccc" : "none",
-        "padding-left": level > 0 ? "5px" : "0",
-        border: "1px solid #000",
-        background: "#fafafa",
-        "font-size": "13px",
-      });
-
-      // Add hide/unhide button for each post
-      const $toggleBtn = $(
-        '<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>'
-      );
-
-      if (data) {
-        const postElement = createPostElement(data);
-        const $postContent = $('<div class="post-content"></div>').html(
-          postElement
-        );
-
-        $toggleBtn.click(() => {
-          if ($postContent.is(":visible")) {
-            $postContent.hide();
-            $toggleBtn.text("[+]");
+  
+  for (const {id, level, data, replies, parents, quotedParents, parentCount, quotedParentCount, isOP} of replyChain) {
+      try {
+          // Use quotedParents if available, fallback to extracting from content
+          const displayParents = quotedParents && quotedParents.length > 0 
+              ? quotedParents 
+              : extractParentIds(data?.comment || data?.com || "").filter(pid => 
+                  replyChain.some(item => item.id === pid)
+              );
+          
+          // Create level indicator with better multi-parent info
+          const $levelHeader = $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${isOP ? '#773311' : '#555'};">
+              ${isOP ? 'OP' : `L${level}`} (${replies.length}↓${displayParents.length}↑)
+              ${displayParents.length > 0 ? ` ← [${displayParents.join(', ')}]` : ''}
+              ${parentCount !== displayParents.length ? ` (graph: ${parentCount} parents)` : ''}
+          </div>`);
+          $container.append($levelHeader);
+          
+          // Create post container with level-based indentation
+          const $postContainer = $('<div class="chain-post"></div>');
+          $postContainer.css({
+              'margin': '2px 0 5px ' + (isOP ? 0 : Math.min(level * 15, 60)) + 'px', // Cap max indentation
+              'border-left': level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : 'none', // Thicker border for deeper levels
+              'padding-left': level > 0 && !isOP ? '5px' : '0',
+              'border': isOP ? '2px solid #773311' : '1px solid #000',
+              'background': isOP ? '#fff8f0' : level > 3 ? '#f0f0f0' : '#fafafa', // Different bg for deep levels
+              'font-size': '13px'
+          });
+          
+          // Add hide/unhide button
+          const $toggleBtn = $('<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>');
+          
+          if (data) {
+              const postElement = createPostElement(data);
+              const $postContent = $('<div class="post-content"></div>').html(postElement);
+              
+              $toggleBtn.click(() => {
+                  if ($postContent.is(':visible')) {
+                      $postContent.hide();
+                      $toggleBtn.text('[+]');
+                  } else {
+                      $postContent.show();
+                      $toggleBtn.text('[−]');
+                  }
+              });
+              
+              $postContainer.append($toggleBtn);
+              $postContainer.append($postContent);
+              
+              // Process the post
+              setTimeout(() => {
+                  const $createdPost = $postContainer.find('article.post');
+                  if ($createdPost.length > 0) {
+                      $createdPost.css({
+                          'margin': '2px',
+                          'padding': '3px',
+                          'font-size': '12px'
+                      });
+                      processPost($createdPost[0]).catch(console.error);
+                  }
+              }, 50 * processed);
           } else {
-            $postContent.show();
-            $toggleBtn.text("[−]");
+              $postContainer.append($toggleBtn);
+              $postContainer.append(`<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`);
           }
-        });
-
-        $postContainer.append($toggleBtn);
-        $postContainer.append($postContent);
-
-        // Process the created post
-        setTimeout(() => {
-          const $createdPost = $postContainer.find("article.post");
-          if ($createdPost.length > 0) {
-            // Make posts more compact
-            $createdPost.css({
-              margin: "2px",
-              padding: "3px",
-              "font-size": "12px",
-            });
-            processPost($createdPost[0]).catch(console.error);
-          }
-        }, 50 * processed);
-      } else {
-        $postContainer.append($toggleBtn);
-        $postContainer.append(
-          `<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`
-        );
+          
+          $container.append($postContainer);
+          processed++;
+          
+          $status.text(`${processed}/${replyChain.length} posts`);
+          
+      } catch (error) {
+          console.error(`Error displaying post ${id}:`, error);
       }
-
-      $container.append($postContainer);
-      processed++;
-
-      $status.text(`${processed}/${replyChain.length} posts`);
-    } catch (error) {
-      console.error(`Error displaying post ${id}:`, error);
-    }
   }
-
+  
   $status.text(`Complete: ${processed} posts`);
 }
 function getContinentColor(country) {
