@@ -39,7 +39,7 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery.selection/1.0.1/jquery.selection.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-mousewheel/3.1.13/jquery.mousewheel.min.js
 // @require       https://raw.githubusercontent.com/carloscabo/colz/master/public/js/colz.class.min.js
-// @grant         none
+// @grant GM_xmlhttpRequest
 // @icon          https://i.imgur.com/LaYyYRl.png
 // ==/UserScript==
 
@@ -1080,73 +1080,53 @@ class PostGraph {
     this.log(`🎯 Penultimate root for post ${postId}: ${penultimate}`);
     return penultimate;
   }
-  sortByConversationFlow(posts) {
-  this.log(`\n🧵 Starting conversation flow sorting for ${posts.length} posts`);
-  
+sortByConversationFlow(posts) {
   const result = [];
   const processed = new Set();
   const childrenMap = new Map();
   
-  // Build children map - ONLY from direct single quotes (not multi-quotes)
+  // Build children map from ALL posts, not just single quotes
   posts.forEach(post => {
-    if (post.quotedParents && post.quotedParents.length === 1) {
-      // Single quote = clear parent-child relationship
-      const parentId = post.quotedParents[0];
-      if (!childrenMap.has(parentId)) {
-        childrenMap.set(parentId, []);
+    if (post.quotedParents && post.quotedParents.length > 0) {
+      // Use the FIRST quoted parent as primary thread
+      const primaryParent = post.quotedParents[0];
+      if (!childrenMap.has(primaryParent)) {
+        childrenMap.set(primaryParent, []);
       }
-      childrenMap.get(parentId).push(post);
+      childrenMap.get(primaryParent).push(post);
     }
   });
   
-  // Sort children chronologically
+  // Sort ALL children chronologically
   for (const children of childrenMap.values()) {
     children.sort((a, b) => parseInt(a.id) - parseInt(b.id));
   }
   
-  // Start with OP
-  const op = posts.find(p => p.level === 0 || p.isOP);
-  if (op) {
-    result.push(op);
-    processed.add(op.id);
-    this.addConversationThread(op.id, childrenMap, posts, result, processed);
-  }
+  // Process ALL posts in chronological order, but group conversation threads
+  const sortedPosts = posts.slice().sort((a, b) => parseInt(a.id) - parseInt(b.id));
   
-  // Handle remaining posts by finding L1 threads
-  const remaining = posts.filter(p => !processed.has(p.id));
-  const l1Posts = remaining.filter(p => p.level === 1);
-  
-  // Sort L1 posts chronologically
-  l1Posts.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-  
-  for (const l1Post of l1Posts) {
-    if (!processed.has(l1Post.id)) {
-      result.push(l1Post);
-      processed.add(l1Post.id);
-      this.addConversationThread(l1Post.id, childrenMap, posts, result, processed);
+  for (const post of sortedPosts) {
+    if (!processed.has(post.id)) {
+      result.push(post);
+      processed.add(post.id);
+      this.addConversationThread(post.id, childrenMap, posts, result, processed);
     }
   }
   
-  // Add any remaining posts (multi-quotes, orphans, etc.)
-  const stillRemaining = posts.filter(p => !processed.has(p.id));
-  stillRemaining.sort((a, b) => {
-    if (a.level !== b.level) return a.level - b.level;
-    return parseInt(a.id) - parseInt(b.id);
-  });
-  result.push(...stillRemaining);
-  
   return result;
 }
-
-addConversationThread(parentId, childrenMap, allPosts, result, processed) {
+addConversationThread(parentId, childrenMap, allPosts, result, processed, depth = 0) {
   const children = childrenMap.get(parentId) || [];
   
+  // Process ALL children of this parent in chronological order
   for (const child of children) {
     if (!processed.has(child.id)) {
       result.push(child);
       processed.add(child.id);
-      // Recursively add this child's thread
-      this.addConversationThread(child.id, childrenMap, allPosts, result, processed);
+      
+      // RECURSIVELY complete this child's entire conversation thread
+      // before moving to the next sibling
+      this.addConversationThread(child.id, childrenMap, allPosts, result, processed, depth + 1);
     }
   }
 }
@@ -1162,7 +1142,7 @@ addConversationThread(parentId, childrenMap, allPosts, result, processed) {
     let opId = null;
     if (includeOP) {
       opId = this.findOP(startPostId);
-      if (opId && this.nodes.has(opId)) {
+      if (opId && this.nodes.has(opId) && startPostId !== opId) {
         toProcess.add(opId);
         levelMap.set(opId, 0);
         this.log(`✅ Added OP: ${opId} at L0`);
@@ -1443,10 +1423,6 @@ buildReverseQuoteIndex() {
       
       const node = this.nodes.get(id);
       if (!node) continue;
-      if(id === opId) {
-        this.log(`👑 Reached OP ${id}, stopping upward traversal`)
-        continue; // Stop upward traversal at OP
-      }
       // Forward: Add replies (limited per post)
       const replies = Array.from(node.replies).slice(0, 5);
       replies.forEach(replyId => {
@@ -1455,7 +1431,6 @@ buildReverseQuoteIndex() {
           this.log(`⬇️ Full: Added reply ${id} -> ${replyId}`);
         }
       });
-      
       // Backward: Add quoted posts
       const commentText = node.data?.comment || node.data?.com || "";
       const quotedParents = extractParentIds(commentText || "");
@@ -2348,18 +2323,39 @@ async function processPostData(data, $placeholder) {
 
 // Extract replies in the thread
 const extractReplies = (num, thread) => {
-  const postsEntry = Object.entries(thread)[0][1];
-  const posts = Object.entries(postsEntry);
-  const postArray = [posts[0][1], ...Object.values(posts[1][1])];
-  ops.push(postArray[0]);
-  for (let p of postArray) {
-    if (p && p.num) {
-      postsObj[p.num] = p;
+  try {
+    // Get the first entry (should be [key, value])
+    const postsEntry = Object.entries(thread)[0]?.[1];
+    if (!postsEntry || typeof postsEntry !== "object") {
+      // Not an object/array, return empty array
+      return [];
     }
+    // postsEntry should have 'op' and 'posts'
+    const op = postsEntry.op;
+    const postsObjList = postsEntry.posts;
+    if (!op || !postsObjList || typeof postsObjList !== "object") {
+      return [];
+    }
+    // Build post array: OP + all posts
+    const postArray = [op, ...Object.values(postsObjList)];
+    if (op) ops.push(op);
+    for (let p of postArray) {
+      if (p && p.num) {
+        postsObj[p.num] = p;
+      }
+    }
+    return postArray
+      .filter(
+        (post) =>
+          post &&
+          typeof post.comment === "string" &&
+          post.comment.indexOf(num) !== -1
+      )
+      .map((post) => post.num);
+  } catch (err) {
+    console.error("extractReplies error:", err);
+    return [];
   }
-  return postArray
-    .filter((post) => post.comment && post.comment.indexOf(num) !== -1)
-    .map((post) => post.num);
 };
 
 // Get the thread ID and number from the link
@@ -2436,23 +2432,29 @@ const extractThreadInfo = (link) => {
 };
 // Modified fetchData function
 const fetchData = async (url, data) => {
-  try {
-    const response = await jQuery.ajax({
-      url: url,
-      type: "GET",
-      data: data,
-      dataType: "json",
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams(data).toString();
+    const fullUrl = params ? `${url}?${params}` : url;
+    
+    GM_xmlhttpRequest({
+      method: 'GET',
+      url: fullUrl,
       timeout: 15000,
-      beforeSend: function (xhr) {
-        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-        // Remove the Referer line - browsers won't allow it
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
       },
+      onload: (response) => {
+        try {
+          const json = JSON.parse(response.responseText);
+          resolve(json);
+        } catch (e) {
+          reject(new Error('Invalid JSON response'));
+        }
+      },
+      onerror: (error) => reject(error),
+      ontimeout: () => reject(new Error('Request timeout'))
     });
-    return response;
-  } catch (error) {
-    console.error("Fetch error:", error);
-    throw error;
-  }
+  });
 };
 // Get replies for a given link
 const fetchReplies = async (link) => {
@@ -2604,7 +2606,7 @@ function addExpandButtonToPost(post) {
     return;
   }
 
-  const backlinkCount = $post.find(".backlink").length;
+  const backlinkCount = $post.find(".backlinks .backlink").length;
 
   if (backlinkCount > 0) {
     const $expandBtn = $(
@@ -2616,14 +2618,7 @@ function addExpandButtonToPost(post) {
     $expandBtn.click(function (e) {
       e.preventDefault();
       const $btn = $(this);
-      if ($btn.hasClass("expanding")) return;
-
-      $btn.addClass("expanding").text("Building Graph...");
       expandAllQuotes(post, true); // Include OP
-
-      setTimeout(() => {
-        $btn.removeClass("expanding").text("Expanded").addClass("disabled");
-      }, 1000);
     });
     const $expandBtn2 = $(
       '<a href="#" class="btnr parent expand-around-btn">Ard(' +
@@ -2634,18 +2629,56 @@ function addExpandButtonToPost(post) {
     $expandBtn2.click(function (e) {
       e.preventDefault();
       const $btn = $(this);
-      if ($btn.hasClass("expanding")) return;
-
-      $btn.addClass("expanding").text("184786362 Graph...");
       expandAllQuotes(post, false, true); // Include OP
-
-      setTimeout(() => {
-        $btn.removeClass("expanding").text("Expanded").addClass("disabled");
-      }, 1000);
     });
 
+    const $expandBtn3 = $(
+      '<a href="#" class="btnr parent expand-around-btn">All</a>'
+    );
+
+    $expandBtn3.click(function (e) {
+      e.preventDefault();
+      const $btn = $(this);
+      expandAllQuotes(post, true, false, true); // Include OP
+    });
+    // specific post expand input
+    const $input = $(
+      '<input type="text" class="post-id-input" placeholder="Post ID" style="width: 16px; margin-left: 5px; font-size: 12px;" />'
+    );
+    $input.val("3");
+    $input.on("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const postCount = $input.val().trim();
+        if (postCount && !isNaN(postCount)) {
+          const $btn = $expandBtn;
+          const $replies = $post.find(".backlinks .backlink");
+          const randomPosts = $replies.sort(() => 0.5 - Math.random()).slice(0, postCount);
+          if (randomPosts.length === 0) {
+            alert("No replies found to expand.");
+            return;
+          }
+          randomPosts.each((_, link) => {
+            const $link = $(link);
+            const board = $link.data("board");
+            const postId = $link.data("post");
+            if (board && postId) {
+              const postKey = `${board}:${postId}`;
+              if (!autoExpandProcessed.has(postKey)) {
+                autoExpandProcessed.add(postKey);
+                $btn.addClass("expanding").text("Building Graph...");
+                expandAllQuotes(post, false);
+              }
+            }
+            $link.css({ backgroundColor: "#447744" });
+          });
+        }
+      }
+    });
     $postControls.append($expandBtn);
     $postControls.append($expandBtn2);
+    $postControls.append($expandBtn3);
+    $postControls.append($input);
   }
 }
 var updS = () => {};
@@ -2654,7 +2687,8 @@ var updS = () => {};
 const expandAllQuotes = async (
   postElement,
   includeOP = true,
-  around = false
+  around = false,
+  all = false
 ) => {
   if (!postElement || !postElement.id) {
     console.warn("Invalid post element");
@@ -2714,7 +2748,8 @@ const expandAllQuotes = async (
   try {
     const p = around
       ? currentPostId
-      : postGraph.findPenultimateRoot(currentPostId);
+      : all ? postGraph.findRoot(currentPostId)
+        : postGraph.findPenultimateRoot(currentPostId);
     const replyChain = postGraph.getReplyChainFromPost(p, includeOP);
     await displayReplyChain(replyChain, $expandedContainer);
   } catch (error) {
@@ -3048,7 +3083,7 @@ function toggleAutoExpand() {
   settings.UserSettings.autoExpand.value =
     !settings.UserSettings.autoExpand.value;
   console.log(`Auto-expansion ${autoExpandEnabled ? "enabled" : "disabled"}`);
-
+  saveSettings();
   // Add visual indicator
   const $indicator = $("#auto-expand-indicator");
   if ($indicator.length === 0) {
@@ -3079,9 +3114,18 @@ function toggleAutoExpand() {
 // Add keyboard shortcut to toggle auto-expansion
 document.addEventListener("keydown", function (e) {
   // Ctrl+Shift+E to toggle auto-expansion
-  if (e.ctrlKey && e.shiftKey && e.key === "E") {
+  if (e.shiftKey && e.key === "E") {
     e.preventDefault();
     toggleAutoExpand();
+  }
+  // shift also expands all posts on page
+  if (e.shiftKey && e.key === "A") {
+    e.preventDefault();
+    $("article.post").each((i, post) => {
+      setTimeout(() => {
+        expandAllQuotes(post);
+      }, i * 1000); // Stagger by 1 second each
+    });
   }
 });
 
