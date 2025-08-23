@@ -1,4 +1,3 @@
-// ./SpookyX.user.js
 // ==UserScript==
 // @name          SpookyX
 // @description   Enhances functionality of FoolFuuka boards. Developed further for more comfortable ghost-posting on the moe archives.
@@ -836,6 +835,14 @@ var settings = {
 var linksClicked = [];
 var focused = { id: null };
 const inverse = !true;
+const url = document.URL;
+var wait = url.split("/")[2].includes("4plebs") ||
+            url.split("/")[2].includes("archived.moe")
+              ? 500
+              : 30;
+if (url.split("/")[2].includes("b4k")) {
+  wait = 10000;
+}
 // Graph structure to track post relationships
 class PostGraph {
   constructor() {
@@ -1096,74 +1103,64 @@ class PostGraph {
     if (around) {
       this.collectAroundContext(startPostId, toProcess);
     } else {
-      this.collectFullContext(startPostId, toProcess);
+      this.collectFullContext(startPostId, toProcess, opId);
     }
     
     this.log(`📊 Collected ${toProcess.size} posts:`, Array.from(toProcess).sort());
     
-    // Helper function to calculate proper level based on QUOTED PARENTS ONLY
     const calculateLevel = (postId) => {
       if (levelMap.has(postId)) {
         return levelMap.get(postId);
       }
       
       const node = this.nodes.get(postId);
-      if (!node) {
-        this.log(`❌ Node ${postId} not found, returning default level 1`);
-        return 1;
-      }
+      if (!node) return 999;
       
-      // If this is OP, level 0
       if (postId === opId) {
         levelMap.set(postId, 0);
-        this.log(`👑 ${postId} is OP -> L0`);
         return 0;
       }
       
-      // Get ACTUAL quoted parents from the post content
+      // Get actual quoted parents from post content
       const commentText = node.data?.comment || node.data?.com || "";
       const quotedParents = extractParentIds(commentText || "").filter(pid => toProcess.has(pid));
       
-      this.log(`🔍 Post ${postId}: Quoted parents in collection: ${quotedParents}`);
-      
-      // If it quotes OP directly, it's always level 1
+      // If quotes OP directly, always level 1
       if (quotedParents.includes(opId)) {
-          levelMap.set(postId, 1);
-          this.log(`🎯 ${postId} -> L1 (quotes OP)`);
-          return 1;
-      }
-      
-      // If no quoted parents in our collection, it's level 1
-      if (quotedParents.length === 0) {
         levelMap.set(postId, 1);
-        this.log(`🎯 ${postId} -> L1 (no in-context quotes)`);
+        this.log(`🎯 ${postId} -> L1 (quotes OP directly)`);
         return 1;
       }
       
-      // Check if all parent levels are calculated
-      const parentLevels = quotedParents.map(pid => levelMap.get(pid));
-      if (parentLevels.some(level => level === undefined)) {
-        this.log(`⏳ ${postId} -> null (parent levels not ready)`);
+      // If no quotes, check if it's a direct child of OP in graph
+      if (quotedParents.length === 0) {
+        if (node.parents && node.parents.has(opId)) {
+          levelMap.set(postId, 1);
+          this.log(`🎯 ${postId} -> L1 (direct graph child of OP)`);
+          return 1;
+        } else {
+          levelMap.set(postId, 1);
+          this.log(`🎯 ${postId} -> L1 (no quotes, assumed L1)`);
+          return 1;
+        }
+      }
+      
+      // Calculate based on quoted parents
+      const parentLevels = quotedParents
+        .map(pid => levelMap.get(pid))
+        .filter(level => level !== undefined);
+      
+      if (parentLevels.length === 0) {
         return null; // Dependencies not ready
       }
-
-      // Strategy: Use EARLIEST quoted parent (lowest post ID) to determine level
-      const sortedParents = [...quotedParents].sort((a, b) => parseInt(a) - parseInt(b));
-      const primaryParentId = sortedParents[0];
-      const primaryParentLevel = levelMap.get(primaryParentId);
       
-      if (primaryParentLevel === undefined) {
-         // This case should be caught by the check above, but as a fallback:
-         this.log(`⏳ ${postId} -> null (primary parent ${primaryParentId} level not ready)`);
-         return null;
-      }
-
-      const level = primaryParentLevel + 1;
+      // Use minimum parent level + 1 for consistent threading
+      const level = Math.min(...parentLevels) + 1;
       levelMap.set(postId, level);
-      this.log(`🎯 ${postId} -> L${level} (based on earliest parent ${primaryParentId} at L${primaryParentLevel})`);
+      this.log(`🎯 ${postId} -> L${level} (min parent level ${Math.min(...parentLevels)} + 1)`);
       return level;
     };
-
+    
     // Step 3: Multi-pass processing to handle dependencies
     const postsToProcess = Array.from(toProcess).filter(id => !visited.has(id));
     let passes = 0;
@@ -1280,39 +1277,80 @@ class PostGraph {
     this.log(`📈 Level distribution:`, levelDistribution);
     
     // Sort by conversation threads, not just levels
+    // Deduplicate posts by ID while preserving order
+    const uniqueResults = Array.from(new Map(result.map(post => [post.id, post])).values());
+    
+    // Log deduplication stats
+    if (result.length !== uniqueResults.length) {
+      this.log(`🔍 Deduplicated ${result.length - uniqueResults.length} duplicate posts`);
+    }
+    
     const sortByConversationFlow = (posts) => {
-      const finalResult = [];
+      const result = [];
       const processed = new Set();
+      const childrenMap = new Map(); // parentId -> children[]
       
-      // Start with OP
+      // Build children map using BOTH quote relationships AND graph relationships
+      posts.forEach(post => {
+        // Method 1: Use explicit quotedParents (preferred)
+        if (post.quotedParents && post.quotedParents.length > 0) {
+          post.quotedParents.forEach(parentId => {
+            if (!childrenMap.has(parentId)) {
+              childrenMap.set(parentId, []);
+            }
+            childrenMap.get(parentId).push(post);
+          });
+        } 
+        // Method 2: Fall back to graph parents if no quoted parents
+        else if (post.parents && post.parents.length > 0) {
+          // Use the earliest parent (lowest ID) as primary parent
+          const primaryParent = post.parents.sort((a, b) => parseInt(a) - parseInt(b))[0];
+          if (!childrenMap.has(primaryParent)) {
+            childrenMap.set(primaryParent, []);
+          }
+          childrenMap.get(primaryParent).push(post);
+        }
+      });
+      
+      // Sort children by ID for consistent ordering
+      for (const children of childrenMap.values()) {
+        children.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+      }
+      
+      // Find OP
       const op = posts.find(p => p.level === 0 || p.isOP);
       if (op) {
-        finalResult.push(op);
+        result.push(op);
         processed.add(op.id);
       }
       
-      // Recursively add children in chronological order
-      const addChildren = (parentId) => {
-        const children = posts
-          .filter(p => p.quotedParents.includes(parentId) && !processed.has(p.id))
-          .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+      // Breadth-first traversal to maintain conversation flow
+      const queue = op ? [op.id] : [];
+      
+      while (queue.length > 0) {
+        const parentId = queue.shift();
+        const children = childrenMap.get(parentId) || [];
         
         for (const child of children) {
-          finalResult.push(child);
-          processed.add(child.id);
-          addChildren(child.id); // Recursively add this child's children
+          if (!processed.has(child.id)) {
+            result.push(child);
+            processed.add(child.id);
+            queue.push(child.id); // Add to queue for BFS
+          }
         }
-      };
+      }
       
-      // Add all children of OP
-      if (op) addChildren(op.id);
+      // Add orphaned posts at the end, grouped by level
+      const orphans = posts.filter(p => !processed.has(p.id));
+      orphans.sort((a, b) => {
+        if (a.level !== b.level) return a.level - b.level;
+        return parseInt(a.id) - parseInt(b.id);
+      });
       
-      // Add any remaining posts
-      const remaining = posts.filter(p => !processed.has(p.id));
-      finalResult.push(...remaining);
+      result.push(...orphans);
       
-      return finalResult;
-    };
+      return result;
+    }
 
     const finalResult = sortByConversationFlow(result);
 
@@ -1367,7 +1405,7 @@ class PostGraph {
   }
   
   // HELPER METHOD 2: Full conversation mode
-  collectFullContext(startPostId, toProcess) {
+  collectFullContext(startPostId, toProcess, opId = null) {
     this.log(`🌐 Collecting full context for ${startPostId}`);
     
     const queue = [{ id: startPostId, depth: 0 }];
@@ -1385,7 +1423,10 @@ class PostGraph {
       
       const node = this.nodes.get(id);
       if (!node) continue;
-      
+      if(id === opId) {
+        this.log(`👑 Reached OP ${id}, stopping upward traversal`)
+        continue; // Stop upward traversal at OP
+      }
       // Forward: Add replies (limited per post)
       const replies = Array.from(node.replies).slice(0, 5);
       replies.forEach(replyId => {
@@ -2630,7 +2671,447 @@ const expandAllQuotes = async (
   // Add header
   const $header = $('<div class="expanded-posts-header"></div>');
   $header.html(
-   
+    `<h3 style="margin: 0; display: inline;">Reply Chain Expansion</h3>`
+  );
+
+  const $closeButton = $('<button class="close-expanded-posts">×</button>');
+  $closeButton.css({
+    float: "right",
+    border: "none",
+    "border-radius": "50%",
+    color: "white",
+    background: "#553311",
+    padding: "2px 8px",
+    cursor: "pointer",
+    "font-size": "16px",
+  });
+  $closeButton.click(() => {
+    $expandedContainer.remove();
+    $(postElement)
+      .find(".expand-all-btn")
+      .removeClass("disabled")
+      .text("Expand All");
+  });
+
+  $header.append($closeButton);
+  $expandedContainer.append($header);
+  $postWrapper.append($expandedContainer);
+
+  try {
+    const p = around
+      ? currentPostId
+      : postGraph.findPenultimateRoot(currentPostId);
+    const replyChain = postGraph.getReplyChainFromPost(p, includeOP);
+    await displayReplyChain(replyChain, $expandedContainer);
+  } catch (error) {
+    console.error("Error in graph expansion:", error);
+    $expandedContainer.append(
+      `<div class="error">Error: ${error.message}</div>`
+    );
+  }
+};
+// Display reply chain in BFS order
+async function displayReplyChain(replyChain, $container) {
+  const $status = $(
+    '<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>'
+  );
+  $container.append($status);
+
+  let processed = 0;
+
+  for (const {
+    id,
+    level,
+    data,
+    replies,
+    parents,
+    quotedParents,
+    parentCount,
+    quotedParentCount,
+    isOP,
+  } of replyChain) {
+    try {
+      // Use quotedParents if available, fallback to extracting from content
+      const displayParents =
+        quotedParents && quotedParents.length > 0
+          ? quotedParents
+          : extractParentIds(data?.comment || data?.com || "").filter((pid) =>
+              replyChain.some((item) => item.id === pid)
+            );
+
+      // Create level indicator with better multi-parent info
+      const $levelHeader =
+        $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${
+          isOP ? "#773311" : "#555"
+        };">
+              ${isOP ? "OP" : `L${level}`} (${replies.length}↓${
+          displayParents.length
+        }↑)
+              ${
+                displayParents.length > 0
+                  ? ` ← [${displayParents.join(", ")}]`
+                  : ""
+              }
+              ${
+                parentCount !== displayParents.length
+                  ? ` (graph: ${parentCount} parents)`
+                  : ""
+              }
+          </div>`);
+      $container.append($levelHeader);
+
+      // Create post container with level-based indentation
+      const $postContainer = $('<div class="chain-post"></div>');
+      $postContainer.css({
+        margin: "2px 0 5px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px", // Cap max indentation
+        "border-left":
+          level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none", // Thicker border for deeper levels
+        "padding-left": level > 0 && !isOP ? "5px" : "0",
+        border: isOP ? "2px solid #773311" : "1px solid #000",
+        background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa", // Different bg for deep levels
+        "font-size": "13px",
+      });
+
+      // Add hide/unhide button
+      const $toggleBtn = $(
+        '<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>'
+      );
+
+      if (data) {
+        const postElement = createPostElement(data);
+        const $postContent = $('<div class="post-content"></div>').html(
+          postElement
+        );
+
+        $toggleBtn.click(() => {
+          if ($postContent.is(":visible")) {
+            $postContent.hide();
+            $toggleBtn.text("[+]");
+          } else {
+            $postContent.show();
+            $toggleBtn.text("[−]");
+          }
+        });
+
+        $postContainer.append($toggleBtn);
+        $postContainer.append($postContent);
+
+        // Process the post
+        setTimeout(() => {
+          const $createdPost = $postContainer.find("article.post");
+          if ($createdPost.length > 0) {
+            $createdPost.css({
+              margin: "2px",
+              padding: "3px",
+              "font-size": "12px",
+            });
+            processPost($createdPost[0]).catch(console.error);
+          }
+        }, 50 * processed);
+      } else {
+        $postContainer.append($toggleBtn);
+        $postContainer.append(
+          `<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`
+        );
+      }
+
+      $container.append($postContainer);
+      processed++;
+
+      $status.text(`${processed}/${replyChain.length} posts`);
+    } catch (error) {
+      console.error(`Error displaying post ${id}:`, error);
+    }
+  }
+
+  $status.text(`Complete: ${processed} posts`);
+}
+function getContinentColor(country) {
+  const continentMap = {
+    // Europe - Blue tones
+    "United Kingdom": "#4285f4",
+    Germany: "#1976d2",
+    France: "#3f51b5",
+    Italy: "#5c6bc0",
+    Spain: "#7986cb",
+    Netherlands: "#3949ab",
+    Poland: "#303f9f",
+    Russia: "#1a237e",
+    Sweden: "#536dfe",
+
+    // North America - Green tones
+    "United States": "#388e3c",
+    Canada: "#4caf50",
+    Mexico: "#66bb6a",
+
+    // Asia - Red/Orange tones
+    China: "#f44336",
+    Japan: "#ff5722",
+    India: "#ff7043",
+    "South Korea": "#ff8a65",
+    Thailand: "#ffab91",
+    Singapore: "#e57373",
+
+    // South America - Purple tones
+    Brazil: "#9c27b0",
+    Argentina: "#ba68c8",
+    Chile: "#ce93d8",
+
+    // Africa - Yellow/Orange tones
+    "South Africa": "#ff9800",
+    Egypt: "#ffb74d",
+    Nigeria: "#ffcc02",
+
+    // Oceania - Cyan tones
+    Australia: "#00bcd4",
+    "New Zealand": "#26c6da",
+  };
+
+  return continentMap[country] || "#757575"; // Default gray
+}
+
+function darkenColor(hex, percent) {
+  const num = parseInt(hex.replace("#", ""), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) - amt;
+  const G = ((num >> 8) & 0x00ff) - amt;
+  const B = (num & 0x0000ff) - amt;
+  return (
+    "#" +
+    (
+      0x1000000 +
+      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
+      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
+      (B < 255 ? (B < 1 ? 0 : B) : 255)
+    )
+      .toString(16)
+      .slice(1)
+  );
+}
+
+function getTextColor(bgColor) {
+  const hex = bgColor.replace("#", "");
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 128 ? "#000" : "#fff";
+}
+function processCountry($p){
+
+  let countryParent = $p.find(".post_type");
+
+  let country = $p.find(".flag");
+  try {
+    if (country.length != 0) {
+      country.each(function () {
+        let $flag = $(this);
+        let title = this.title || $flag.attr("title") || "";
+        title = title.replace('Click here to search for posts with this flag', '')
+        // Get continent color
+        let color = getContinentColor(title);
+
+        $flag.css({
+          transform: "scale(1.8)",
+          "transform-origin": "left center",
+          "margin-right": "20px",
+        });
+        $flag
+          .parent()
+          .css({
+            padding: "2px 6px",
+            "font-size": "11px",
+            "font-weight": "400",
+            "border-radius": "2px",
+            border: "1px solid " + darkenColor(color, 20),
+            "background-color": darkenColor(color, 35),
+            color: getTextColor(color),
+            "text-transform": "uppercase",
+            "letter-spacing": "0.5px",
+          })
+          .append(" " + title);
+      });
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+// Helper to extract post data from DOM
+function extractPostData($post) {
+  return {
+    id: $post.attr("id"),
+    content: $post.find(".text").html() || "",
+    author: $post.find(".post_author").text() || "Anonymous",
+    timestamp: $post.find(".post_data").text() || "",
+    // Add more fields as needed
+  };
+}
+
+const processPost = async (post) => {
+  if (!post) {
+    console.error("processPost called with undefined post");
+    return;
+  }
+
+  let id = post.id;
+  let rec = false;
+  if (id && id.charAt(0) === "r") {
+    id = id.substring(1);
+    rec = true;
+  }
+
+  if (!id) {
+    console.error("Post has no ID:", post);
+    return;
+  }
+
+  let $p = $(post);
+
+  // Style the OP post
+  if ($p.hasClass("post_is_op")) {
+    $p.css({
+      border: "2px solid #AF3355",
+      "background-color": "#FFF0F3", // Optional, to emphasize OP more
+    });
+  }
+
+  // Find the correct anchor element
+  let aElem = $p.find('.post_data a[data-function="highlight"]').first();
+  if (aElem.length === 0) {
+    aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
+  }
+  if (aElem.length === 0) {
+    console.log(`No anchor element found for post ${id}`);
+    return;
+  }
+  processCountry($p);
+  try {
+    // Use your existing fetchRepliesWithRetry function
+    let replies = await fetchRepliesWithRetry(aElem, wait * 500, wait);
+
+    if (!replies || replies.length === 0) {
+      console.log(`No replies found for post ${id}`);
+      addExpandButtonToPost(post);
+      processedPosts++;
+      return;
+    }
+
+    const repliesElems = replies.map((num) => {
+      let board = $p.data("board") || "co";
+      let el = $(
+        `<a href="https://desuarchive.org/${board}/post/${num}/" class="backlink" data-function="highlight" data-backlink="true" data-board="${board}" data-post="${num}">&gt;&gt;${num}</a>`
+      );
+      return el[0];
+    });
+
+    // Find or create the backlinks container
+    let $backlinksContainer = $p.find(".backlinks");
+    if ($backlinksContainer.length === 0) {
+      $backlinksContainer = $(
+        '<div class="backlinks" style="font-size: 0.7rem; padding: 2px;">Quoted By:</div>'
+      );
+      $p.find(".post_wrapper").append($backlinksContainer);
+    }
+
+    // Add the backlinks to the container
+    for (let r of repliesElems) {
+      $backlinksContainer.append(r);
+    }
+
+    // Add individual expand button to post controls
+    addExpandButtonToPost(post);
+
+    console.log("Replies: ", replies, repliesElems);
+    processedPosts++;
+  } catch (err) {
+    console.error(`Error processing post ${id}:`, err);
+    addExpandButtonToPost(post);
+    processedPosts++;
+  }
+};
+// Function to enable/disable auto-expansion
+function toggleAutoExpand() {
+  settings.UserSettings.autoExpand.value =
+    !settings.UserSettings.autoExpand.value;
+  console.log(`Auto-expansion ${autoExpandEnabled ? "enabled" : "disabled"}`);
+
+  // Add visual indicator
+  const $indicator = $("#auto-expand-indicator");
+  if ($indicator.length === 0) {
+    $("body").append(
+      `<div id="auto-expand-indicator" style="position: fixed; top: 10px; right: 10px; background: ${
+        settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336"
+      }; color: white; padding: 5px 10px; border-radius: 3px; z-index: 9999; font-size: 12px;">Auto-expand: ${
+        settings.UserSettings.autoExpand.value ? "ON" : "OFF"
+      }</div>`
+    );
+  } else {
+    $indicator
+      .css(
+        "background",
+        settings.UserSettings.autoExpand.value ? "#4CAF50" : "#f44336"
+      )
+      .text(
+        `Auto-expand: ${settings.UserSettings.autoExpand.value ? "ON" : "OFF"}`
+      );
+  }
+
+  // Hide indicator after 3 seconds
+  setTimeout(() => {
+    $("#auto-expand-indicator").fadeOut();
+  }, 3000);
+}
+
+// Add keyboard shortcut to toggle auto-expansion
+document.addEventListener("keydown", function (e) {
+  // Ctrl+Shift+E to toggle auto-expansion
+  if (e.ctrlKey && e.shiftKey && e.key === "E") {
+    e.preventDefault();
+    toggleAutoExpand();
+  }
+});
+
+// Add global expand all button to page
+function addGlobalControls() {
+  const $controls = $(
+    '<div id="global-expand-controls" style="position: fixed; top: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px;"></div>'
+  );
+
+  const $autoToggle = $(
+    '<button id="toggle-auto-expand" style="margin-right: 10px; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Auto-expand: ON</button>'
+  );
+  const $expandAll = $(
+    '<button id="expand-all-posts" style="padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Expand All Posts</button>'
+  );
+
+  $autoToggle.click(toggleAutoExpand);
+  $expandAll.click(() => {
+    $("article.post").each((i, post) => {
+      setTimeout(() => {
+        expandAllQuotes(post);
+      }, i * 1000); // Stagger by 1 second each
+    });
+  });
+
+  $controls.append($autoToggle, $expandAll);
+  $("body").append($controls);
+
+  // Hide controls after 5 seconds, show on hover
+  setTimeout(() => {
+    $controls.css("opacity", "0.0");
+  }, 5000);
+
+  $controls.hover(
+    () => $controls.css("opacity", "1"),
+    () => $controls.css("opacity", "0.0")
+  );
+}
+
+// Initialize when page loads
+$(document).ready(() => {
+  addGlobalControls();
+});
+
 var defaultSettings = jQuery.extend(true, {}, settings);
 
 var defaultMascots = [
@@ -7738,6 +8219,9 @@ $(document).ready(function () {
     $.each(posts, function (index, p) {
       let $p = $(p); // Convert p to a jQuery object
       let links = $p.find(".post_controls"); // Find non-inlined backlinks
+      if(!search){
+        processCountry($p);
+      }
       links.each(function () {
         let $this = $(this);
         let $button = $('<button class="OP-button">OP</button>');
@@ -7948,16 +8432,6 @@ $(document).ready(function () {
         if (search) {
           let posts = document.querySelectorAll("article.post"); // Get all posts
           let totalPosts = posts.length;
-
-          const url = document.URL;
-          var wait =
-            url.split("/")[2].includes("4plebs") ||
-            url.split("/")[2].includes("archived.moe")
-              ? 500
-              : 30;
-          if (url.split("/")[2].includes("b4k")) {
-            wait = 10000;
-          }
 
           // Sequentially process each post with a delay
           for (let i = 0; i < totalPosts; i++) {
