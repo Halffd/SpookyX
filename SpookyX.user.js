@@ -1079,7 +1079,115 @@ class PostGraph {
     this.log(`🎯 Penultimate root for post ${postId}: ${penultimate}`);
     return penultimate;
   }
-
+  sortByConversationFlow(posts) {
+    this.log(`\n🧵 Starting conversation flow sorting for ${posts.length} posts`);
+    
+    const result = [];
+    const processed = new Set();
+    const childrenMap = new Map(); // parentId -> [children]
+    
+    // Build children map from ACTUAL quotes (not just graph relationships)
+    posts.forEach(post => {
+      if (post.quotedParents && post.quotedParents.length > 0) {
+        post.quotedParents.forEach(parentId => {
+          if (!childrenMap.has(parentId)) {
+            childrenMap.set(parentId, []);
+          }
+          childrenMap.get(parentId).push(post);
+        });
+      }
+    });
+    
+    // Sort children chronologically within each parent
+    for (const children of childrenMap.values()) {
+      children.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    }
+    
+    this.log(`🗺️ Children map:`, 
+      Array.from(childrenMap.entries()).map(([parent, children]) => 
+        `${parent} -> [${children.map(c => c.id).join(', ')}]`
+      ).join('; ')
+    );
+    
+    // Start with OP
+    const op = posts.find(p => p.level === 0 || p.isOP);
+    if (op) {
+      result.push(op);
+      processed.add(op.id);
+    }
+    
+    // Recursive function to add conversation threads
+    const addConversationThread = (parentId, indent = 0) => {
+      const children = childrenMap.get(parentId) || [];
+      
+      for (const child of children) {
+        if (processed.has(child.id)) continue;
+        
+        this.log(`${'  '.repeat(indent)}📝 Adding ${child.id} (child of ${parentId})`);
+        result.push(child);
+        processed.add(child.id);
+        
+        // Recursively add this child's conversation thread
+        addConversationThread(child.id, indent + 1);
+      }
+    };
+    
+    // Add all conversation threads starting from OP
+    if (op) {
+      addConversationThread(op.id);
+    }
+    
+    // Group remaining posts by their root thread
+    const orphans = posts.filter(p => !processed.has(p.id));
+    const rootThreads = new Map(); // rootId -> posts[]
+    
+    orphans.forEach(post => {
+      // Find which L1 post this belongs to
+      let rootId = null;
+      if (post.level === 1) {
+        rootId = post.id; // This IS a root thread
+      } else if (post.quotedParents && post.quotedParents.length > 0) {
+        // Find the earliest L1 ancestor
+        for (const parentId of post.quotedParents) {
+          const parent = posts.find(p => p.id === parentId);
+          if (parent && parent.level === 1) {
+            rootId = parentId;
+            break;
+          }
+        }
+      }
+      
+      if (rootId) {
+        if (!rootThreads.has(rootId)) {
+          rootThreads.set(rootId, []);
+        }
+        rootThreads.get(rootId).push(post);
+      }
+    });
+    
+    // Add orphaned threads in chronological order
+    const sortedRoots = Array.from(rootThreads.keys()).sort((a, b) => parseInt(a) - parseInt(b));
+    
+    for (const rootId of sortedRoots) {
+      const threadPosts = rootThreads.get(rootId);
+      
+      // Sort by level first, then chronologically
+      threadPosts.sort((a, b) => {
+        if (a.level !== b.level) return a.level - b.level;
+        return parseInt(a.id) - parseInt(b.id);
+      });
+      
+      this.log(`\n🧵 Adding orphaned thread starting with ${rootId}:`);
+      threadPosts.forEach(post => {
+        this.log(`  📝 Adding ${post.id} (L${post.level})`);
+      });
+      
+      result.push(...threadPosts);
+    }
+    
+    this.log(`\n✅ Final conversation flow: ${result.map(p => p.id).join(' -> ')}`);
+    return result;
+  }
   getReplyChainFromPost(startPostId, includeOP = true, maxPosts = Infinity, around = false) {
     const result = [];
     const visited = new Set();
@@ -1284,75 +1392,8 @@ class PostGraph {
     if (result.length !== uniqueResults.length) {
       this.log(`🔍 Deduplicated ${result.length - uniqueResults.length} duplicate posts`);
     }
-    
-    const sortByConversationFlow = (posts) => {
-      const result = [];
-      const processed = new Set();
-      const childrenMap = new Map(); // parentId -> children[]
-      
-      // Build children map using BOTH quote relationships AND graph relationships
-      posts.forEach(post => {
-        // Method 1: Use explicit quotedParents (preferred)
-        if (post.quotedParents && post.quotedParents.length > 0) {
-          post.quotedParents.forEach(parentId => {
-            if (!childrenMap.has(parentId)) {
-              childrenMap.set(parentId, []);
-            }
-            childrenMap.get(parentId).push(post);
-          });
-        } 
-        // Method 2: Fall back to graph parents if no quoted parents
-        else if (post.parents && post.parents.length > 0) {
-          // Use the earliest parent (lowest ID) as primary parent
-          const primaryParent = post.parents.sort((a, b) => parseInt(a) - parseInt(b))[0];
-          if (!childrenMap.has(primaryParent)) {
-            childrenMap.set(primaryParent, []);
-          }
-          childrenMap.get(primaryParent).push(post);
-        }
-      });
-      
-      // Sort children by ID for consistent ordering
-      for (const children of childrenMap.values()) {
-        children.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-      }
-      
-      // Find OP
-      const op = posts.find(p => p.level === 0 || p.isOP);
-      if (op) {
-        result.push(op);
-        processed.add(op.id);
-      }
-      
-      // Breadth-first traversal to maintain conversation flow
-      const queue = op ? [op.id] : [];
-      
-      while (queue.length > 0) {
-        const parentId = queue.shift();
-        const children = childrenMap.get(parentId) || [];
-        
-        for (const child of children) {
-          if (!processed.has(child.id)) {
-            result.push(child);
-            processed.add(child.id);
-            queue.push(child.id); // Add to queue for BFS
-          }
-        }
-      }
-      
-      // Add orphaned posts at the end, grouped by level
-      const orphans = posts.filter(p => !processed.has(p.id));
-      orphans.sort((a, b) => {
-        if (a.level !== b.level) return a.level - b.level;
-        return parseInt(a.id) - parseInt(b.id);
-      });
-      
-      result.push(...orphans);
-      
-      return result;
-    }
 
-    const finalResult = sortByConversationFlow(result);
+    const finalResult = this.sortByConversationFlow(result);
 
     this.log(`\n📋 Final Sorted Results:`);
     finalResult.forEach(post => {
