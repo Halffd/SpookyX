@@ -848,6 +848,7 @@ class PostGraph {
   constructor() {
     this.nodes = new Map(); // postId -> {data, replies: Set, parents: Set, id}
     this.roots = new Set(); // Root posts (OPs or posts with no parents)
+    this.reverseQuoteIndex = new Map(); // postId -> Set of postIds that quote it
     this.DEBUG = true; // Enable full debugging
   }
 
@@ -1365,7 +1366,24 @@ addConversationThread(parentId, childrenMap, allPosts, result, processed) {
     
     return finalResult;
   }
+  // Build this ONCE when parsing the thread, not during every traversal
+buildReverseQuoteIndex() {
+  const reverseQuotes = new Map(); // postId -> [posts that quote it]
   
+  for (const [nodeId, nodeData] of this.nodes.entries()) {
+    const commentText = nodeData.data?.comment || nodeData.data?.com || "";
+    const quotedParents = extractParentIds(commentText || "");
+    
+    quotedParents.forEach(quotedId => {
+      if (!reverseQuotes.has(quotedId)) {
+        reverseQuotes.set(quotedId, []);
+      }
+      reverseQuotes.get(quotedId).push(nodeId);
+    });
+  }
+  
+  return reverseQuotes;
+}
   // HELPER METHOD 1: Focused "around" mode
   collectAroundContext(startPostId, toProcess) {
     this.log(`🎯 Collecting around context for ${startPostId}`);
@@ -1449,20 +1467,14 @@ addConversationThread(parentId, childrenMap, allPosts, result, processed) {
         }
       });
       
-      // Reverse: Add posts that quote this one (very limited)
-      let reverseCount = 0;
-      for (const [nodeId, nodeData] of this.nodes.entries()) {
-        if (seen.has(nodeId) || reverseCount >= 2) continue;
-        
-        const nodeComment = nodeData.data?.comment || nodeData.data?.com || "";
-        const nodeQuotes = extractParentIds(nodeComment || "");
-        
-        if (nodeQuotes.includes(id)) {
-          queue.push({ id: nodeId, depth: depth + 1 });
-          this.log(`🔄 Full: Added reverse quote ${nodeId} -> ${id}`);
-          reverseCount++;
+      // Use pre-built reverse index instead of scanning
+      const reverseQuotes = this.reverseQuoteIndex.get(id) || [];
+      reverseQuotes.slice(0, 2).forEach(quotingId => { // Limit to 2
+        if (!seen.has(quotingId)) {
+          queue.push({ id: quotingId, depth: depth + 1 });
+          this.log(`🔄 Full: Added reverse quote ${quotingId} -> ${id}`);
         }
-      }
+      });
     }
   }
 
@@ -2526,7 +2538,7 @@ const fetchThread = async (board, threadId) => {
         console.log(`Added post ${postId} to graph with no parents (root)`);
       }
     }
-
+    postGraph.reverseQuoteIndex = postGraph.buildReverseQuoteIndex();
     console.log(`Graph now contains ${postGraph.nodes.size} posts total`);
   }
 
