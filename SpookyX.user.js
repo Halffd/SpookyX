@@ -839,6 +839,19 @@ function startMainScript() {
             },
         },
     };
+    
+    function settingsStrip(input) {
+        var obj = {};
+        $.each(input, function(key, value) {
+            obj[key] = {};
+            obj[key].value = value.value;
+            if (value.suboptions !== undefined) {
+                obj[key].suboptions = settingsStrip(value.suboptions);
+            }
+        });
+        return obj;
+    }
+
     var saveSettings;
     var linksClicked = [];
     var focused = { id: null };
@@ -846,8 +859,8 @@ function startMainScript() {
     const url = document.URL;
     var wait = url.split("/")[2].includes("4plebs") ||
         url.split("/")[2].includes("archived.moe")
-        ? 500
-        : 30;
+        ? 700
+        : 150;
     if (url.split("/")[2].includes("b4k")) {
         wait = 10000;
     }
@@ -1397,7 +1410,7 @@ function startMainScript() {
                     // Add some replies to the quoted posts (limited)
                     const quotedNode = this.nodes.get(quotedId);
                     if (quotedNode) {
-                        Array.from(quotedNode.replies).slice(0, 3).forEach(replyId => {
+                        Array.from(quotedNode.replies).forEach(replyId => {
                             toProcess.add(replyId);
                             this.log(`↪️ Around: Added reply to quoted parent ${quotedId} -> ${replyId}`);
                         });
@@ -1406,7 +1419,7 @@ function startMainScript() {
             });
 
             // Add direct replies (what quotes this post) - very limited
-            Array.from(startNode.replies).slice(0, 3).forEach(replyId => {
+            Array.from(startNode.replies).forEach(replyId => {
                 toProcess.add(replyId);
                 this.log(`⬇️ Around: Added direct reply ${startPostId} -> ${replyId}`);
             });
@@ -1432,19 +1445,21 @@ function startMainScript() {
                 const node = this.nodes.get(id);
                 if (!node) continue;
                 // Forward: Add replies (limited per post)
-                const replies = Array.from(node.replies).slice(0, 5);
+                const replies = Array.from(node.replies);
                 replies.forEach(replyId => {
                     if (!seen.has(replyId)) {
                         queue.push({ id: replyId, depth: depth + 1 });
                         this.log(`⬇️ Full: Added reply ${id} -> ${replyId}`);
                     }
                 });
+
+                if(id == opId) return
                 // Backward: Add quoted posts
                 const commentText = node.data?.comment || node.data?.com || "";
                 const quotedParents = extractParentIds(commentText || "");
 
                 quotedParents.forEach(quotedId => {
-                    if (!seen.has(quotedId) && this.nodes.has(quotedId)) {
+                    if (!seen.has(quotedId) && this.nodes.has(quotedId) && quotedId   != opId) {
                         queue.push({ id: quotedId, depth: depth + 1 });
                         this.log(`⬆️ Full: Added quoted parent ${id} -> ${quotedId}`);
                     }
@@ -1452,7 +1467,7 @@ function startMainScript() {
 
                 // Use pre-built reverse index instead of scanning
                 const reverseQuotes = this.reverseQuoteIndex.get(id) || [];
-                reverseQuotes.slice(0, 2).forEach(quotingId => { // Limit to 2
+                reverseQuotes.forEach(quotingId => {
                     if (!seen.has(quotingId)) {
                         queue.push({ id: quotingId, depth: depth + 1 });
                         this.log(`🔄 Full: Added reverse quote ${quotingId} -> ${id}`);
@@ -1515,7 +1530,6 @@ function startMainScript() {
                 // Only add immediate replies (limited expansion)
                 const recentReplies = Array.from(node.replies)
                     .sort((a, b) => parseInt(a) - parseInt(b))
-                    .slice(0, 5); // Limit to 5 most recent replies
 
                 for (const replyId of recentReplies) {
                     if (!visited.has(replyId)) {
@@ -2444,6 +2458,14 @@ function startMainScript() {
                 url: fullUrl,
                 timeout: 15000,
                 headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
                 onload: (response) => {
@@ -2603,7 +2625,7 @@ function startMainScript() {
 
         const backlinkCount = $post.find(".backlinks .backlink").length;
 
-        if (backlinkCount > 0) {
+        if (backlinkCount >= 0) {
             const $expandBtn = $(
                 '<a href="#" class="btnr parent expand-all-btn">Exp(' +
                 backlinkCount +
@@ -2943,6 +2965,9 @@ function startMainScript() {
 
         let country = $p.find(".flag");
         try {
+            if(country.length === 0){
+                country = $p.find(".post_type > a > span");
+            }
             if (country.length != 0) {
                 country.each(function() {
                     let $flag = $(this);
@@ -3103,12 +3128,12 @@ function startMainScript() {
     // Add keyboard shortcut to toggle auto-expansion
     document.addEventListener("keydown", function(e) {
         // Ctrl+Shift+E to toggle auto-expansion
-        if (e.shiftKey && e.key === "E") {
+        if (e.shiftKey && e.key === "A") {
             e.preventDefault();
             toggleAutoExpand();
         }
         // shift also expands all posts on page
-        if (e.shiftKey && e.key === "A") {
+        if (e.shiftKey && e.key === "E") {
             e.preventDefault();
             $("article.post").each((i, post) => {
                 setTimeout(() => {
@@ -3876,7 +3901,7 @@ function startMainScript() {
                             console.log(`Setting image src to: ${fullImage}`);
                             $image.attr("src", fullImage);
 
-                            $image.error(function() {
+                            $image.on('error', function() {
                                 // Handle images that won't load
                                 console.error(`Image failed to load: ${fullImage}`);
 
@@ -6614,7 +6639,7 @@ function startMainScript() {
     }
 
     saveSettings = () => {
-        settingsStore = {};
+        var settingsStore = {};
         settingsStore.UserSettings = settingsStrip(settings.UserSettings);
         settingsStore.FilterSettings = settingsStrip(settings.FilterSettings);
         localStorage.SpookyXsettings = JSON.stringify(settingsStore); // Save the settings
@@ -8088,18 +8113,6 @@ function startMainScript() {
             return settingsHTML;
         }
 
-        function settingsStrip(input) {
-            var obj = {};
-            $.each(input, function(key, value) {
-                obj[key] = {};
-                obj[key].value = value.value;
-                if (value.suboptions !== undefined) {
-                    obj[key].suboptions = settingsStrip(value.suboptions);
-                }
-            });
-            return obj;
-        }
-
         $(function() {
             shortcut.add("ctrl+s", function() {
                 executeShortcut("spoiler");
@@ -8254,6 +8267,8 @@ function startMainScript() {
                     console.log($p, $p.attr("id"), links.length, links); // Log info about the post
                 }
             }
+            let oc=$('article > header > div');
+            processCountry(oc);
             if (!inverse) {
                 // From reverse first post to last
                 $.each(posts.toArray().reverse(), function(index, p) {
