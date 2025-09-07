@@ -839,7 +839,7 @@ function startMainScript() {
             },
         },
     };
-    
+
     function settingsStrip(input) {
         var obj = {};
         $.each(input, function(key, value) {
@@ -863,6 +863,388 @@ function startMainScript() {
         : 150;
     if (url.split("/")[2].includes("b4k")) {
         wait = 10000;
+    }
+    class Reply {
+        constructor(postId, data, level = 0) {
+            this.id = postId;
+            this.data = data;
+            this.level = level;
+            this.children = [];
+            this.parent = null;
+            this.quotedParents = [];
+            this.isOP = false;
+        }
+    
+        addChild(reply) {
+            reply.parent = this;
+            reply.level = this.level + 1;
+            this.children.push(reply);
+            return reply;
+        }
+    
+        getAllDescendants() {
+            const result = [];
+            
+            const traverse = (reply) => {
+                result.push(reply);
+                const sortedChildren = reply.children
+                    .slice()
+                    .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                
+                sortedChildren.forEach(child => traverse(child));
+            };
+            
+            traverse(this);
+            return result;
+        }
+    
+        findById(postId) {
+            if (this.id === postId) return this;
+            
+            for (const child of this.children) {
+                const found = child.findById(postId);
+                if (found) return found;
+            }
+            return null;
+        }
+    
+        getThread() {
+            return this.getAllDescendants().map(reply => ({
+                id: reply.id,
+                level: reply.level,
+                data: reply.data,
+                quotedParents: reply.quotedParents,
+                isOP: reply.isOP,
+                hasChildren: reply.children.length > 0,
+                parentId: reply.parent?.id || null
+            }));
+        }
+    }
+    
+    class ConversationTree {
+        constructor(postGraph) {
+            this.postGraph = postGraph;
+            this.roots = new Map();
+            this.allReplies = new Map();
+            this.DEBUG = true;
+        }
+    
+        log(...args) {
+            if (this.DEBUG) console.log(...args);
+        }
+    
+        buildFromPostGraph(startPostId, mode = 'around') {
+            this.log(`🏗️ Building tree from PostGraph for ${startPostId} (${mode})`);
+            
+            this.roots.clear();
+            this.allReplies.clear();
+            
+            const relevantPosts = this.collectRelevantPosts(startPostId, mode);
+            
+            // Create Reply objects
+            relevantPosts.forEach(postId => {
+                const node = this.postGraph.nodes.get(postId);
+                if (node) {
+                    const reply = new Reply(postId, node.data, 0);
+                    const commentText = node.data?.comment || node.data?.com || "";
+                    reply.quotedParents = extractParentIds(commentText || "")
+                        .filter(pid => relevantPosts.has(pid));
+                    reply.isOP = this.postGraph.findOP(postId) === postId;
+                    this.allReplies.set(postId, reply);
+                }
+            });
+            
+            // SIMPLIFIED tree building - just use quote relationships directly
+            this.buildSimpleTree();
+            
+            return this;
+        }
+        attachToParent(reply, processed, processing) {
+            processing.add(reply.id);
+            
+            let bestParent = null;
+            let bestScore = -1;
+            
+            for (const quotedId of reply.quotedParents) {
+                if (!this.allReplies.has(quotedId)) continue;
+                if (!processed.has(quotedId)) {
+                    processing.delete(reply.id);
+                    return false;
+                }
+                if (processing.has(quotedId)) {
+                    this.log(`🔄 Cycle detected: ${reply.id} -> ${quotedId}`);
+                    continue;
+                }
+                
+                const parentReply = this.allReplies.get(quotedId);
+                
+                // FIXED: Score parents by chronological order AND tree depth
+                // Prefer the LATEST quoted post that's still before this reply
+                const chronologicalScore = parseInt(quotedId);
+                const depthPenalty = parentReply.level * 100; // Small penalty for deeper nesting
+                const score = chronologicalScore - depthPenalty;
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestParent = parentReply;
+                }
+            }
+            
+            processing.delete(reply.id);
+            
+            if (bestParent) {
+                bestParent.addChild(reply);
+                this.log(`✅ Multi-quote ${reply.id} attached to latest parent ${bestParent.id} (score: ${bestScore})`);
+                return true;
+            }
+            
+            return false;
+        }
+        // MUCH SIMPLER tree building approach
+        buildSimpleTree() {
+            this.log(`🌳 Building simple tree structure`);
+            
+            // Step 1: Find all root posts (OP or posts with no quoted parents in our set)
+            for (const [postId, reply] of this.allReplies.entries()) {
+                if (reply.isOP || reply.quotedParents.length === 0) {
+                    this.roots.set(postId, reply);
+                    reply.level = 0;
+                    this.log(`🎯 Root found: ${postId} (isOP: ${reply.isOP})`);
+                }
+            }
+            
+            // Step 2: Build the tree in multiple passes
+            let maxPasses = 10;
+            let pass = 0;
+            let changed = true;
+            
+            while (changed && pass < maxPasses) {
+                pass++;
+                changed = false;
+                this.log(`\n=== PASS ${pass} ===`);
+                
+                for (const [postId, reply] of this.allReplies.entries()) {
+                    // Skip if already attached
+                    if (reply.parent !== null || this.roots.has(postId)) continue;
+                    
+                    // Try to find a parent among quoted posts
+                    let bestParent = null;
+                    for (const quotedId of reply.quotedParents) {
+                        const parentReply = this.allReplies.get(quotedId);
+                        if (parentReply && (parentReply.parent !== null || this.roots.has(quotedId))) {
+                            // Parent is already placed in tree
+                            if (!bestParent || parseInt(quotedId) < parseInt(bestParent.id)) {
+                                bestParent = parentReply;
+                            }
+                        }
+                    }
+                    
+                    if (bestParent) {
+                        bestParent.addChild(reply);
+                        changed = true;
+                        this.log(`✅ Attached ${postId} to ${bestParent.id} at level ${reply.level}`);
+                    }
+                }
+            }
+            
+            // Step 3: Any remaining unattached posts become roots
+            for (const [postId, reply] of this.allReplies.entries()) {
+                if (reply.parent === null && !this.roots.has(postId)) {
+                    this.roots.set(postId, reply);
+                    reply.level = 0;
+                    this.log(`🌱 Orphan became root: ${postId}`);
+                }
+            }
+            
+            this.log(`\n📊 Final tree: ${this.roots.size} roots, ${this.allReplies.size} total posts`);
+        }
+    
+        // Keep existing methods: collectRelevantPosts, getOrganizedThreads, printTree, etc.
+        collectRelevantPosts(startPostId, mode) {
+            const relevant = new Set();
+            const visited = new Set();
+            
+            this.log(`📦 Collecting posts for ${startPostId} in ${mode} mode`);
+        
+            if (mode === 'around') {
+                // AROUND MODE: Tight focus, minimal OP replies
+                relevant.add(startPostId);
+                
+                const startNode = this.postGraph.nodes.get(startPostId);
+                if (startNode) {
+                    // Add OP but be VERY careful with its replies
+                    const opId = this.postGraph.findOP(startPostId);
+                    if (opId) {
+                        relevant.add(opId);
+                        
+                        // CRITICAL: Only add OP replies that are in our conversation chain
+                        const opNode = this.postGraph.nodes.get(opId);
+                        if (opNode && opId !== startPostId) {
+                            // Only add OP replies that lead to our starting post
+                            const pathToStart = this.getPathFromOpToPost(opId, startPostId);
+                            pathToStart.forEach(postId => relevant.add(postId));
+                        }
+                    }
+                    
+                    // Add what this post quotes (parents)
+                    const commentText = startNode.data?.comment || startNode.data?.com || "";
+                    const quotedParents = extractParentIds(commentText || "");
+                    quotedParents.forEach(pid => {
+                        if (this.postGraph.nodes.has(pid)) {
+                            relevant.add(pid);
+                        }
+                    });
+                    
+                    // Add direct replies to this post (limited)
+                    Array.from(startNode.replies).forEach(replyId => {
+                        relevant.add(replyId);
+                    });
+                    
+                    // Add replies to quoted posts (but NOT if they're OP)
+                    quotedParents.forEach(pid => {
+                        if (pid !== opId) { // Skip OP replies here
+                            const parentNode = this.postGraph.nodes.get(pid);
+                            if (parentNode) {
+                                Array.from(parentNode.replies).forEach(replyId => {
+                                    relevant.add(replyId);
+                                });
+                            }
+                        }
+                    });
+                }
+            } else {
+                // FULL MODE: Follow conversation thread with OP safety
+                const queue = [startPostId];
+                let maxPosts = 300000; // Reduced limit
+                let collected = 0;
+        
+                while (queue.length > 0 && collected < maxPosts) {
+                    const currentId = queue.shift();
+                    if (visited.has(currentId)) continue;
+                    
+                    visited.add(currentId);
+                    relevant.add(currentId);
+                    collected++;
+                    
+                    const node = this.postGraph.nodes.get(currentId);
+                    if (!node) continue;
+        
+                    // Add OP but with EXTREME caution
+                    const opId = this.postGraph.findOP(currentId);
+                    if (opId && !relevant.has(opId) && collected < maxPosts) {
+                        relevant.add(opId);
+                        collected++;
+                        
+                        // CRITICAL: DO NOT add OP replies in full mode unless they're direct ancestors
+                        // Only add the path from OP to our conversation
+                        if (currentId !== opId) {
+                            const pathFromOp = this.getPathFromOpToPost(opId, currentId);
+                            pathFromOp.forEach(pathPostId => {
+                                if (!relevant.has(pathPostId) && collected < maxPosts) {
+                                    relevant.add(pathPostId);
+                                    collected++;
+                                }
+                            });
+                        }
+                    }
+        
+                    // Add quoted posts (backward links)
+                    const commentText = node.data?.comment || node.data?.com || "";
+                    const quotedParents = extractParentIds(commentText || "");
+                    quotedParents.forEach(pid => {
+                        if (this.postGraph.nodes.has(pid) && !visited.has(pid) && collected < maxPosts) {
+                            queue.push(pid);
+                        }
+                    });
+        
+                    // Add replies - but SKIP if current post is OP
+                    if (currentId !== opId) {
+                        Array.from(node.replies).forEach(replyId => {
+                            if (!visited.has(replyId) && collected < maxPosts) {
+                                queue.push(replyId);
+                            }
+                        });
+                    } else {
+                        // If this IS the OP, only add replies that are directly quoted by posts in our set
+                        this.log(`⚠️ At OP ${opId} - skipping bulk reply addition`);
+                    }
+                }
+            }
+        
+            this.log(`📦 Collected ${relevant.size} relevant posts (mode: ${mode})`);
+            return relevant;
+        }
+        
+        // Helper method to get the path from OP to a specific post
+        getPathFromOpToPost(opId, targetPostId) {
+            const path = [];
+            let currentId = targetPostId;
+            const visited = new Set();
+            
+            while (currentId && currentId !== opId && !visited.has(currentId)) {
+                visited.add(currentId);
+                path.unshift(currentId);
+                
+                const node = this.postGraph.nodes.get(currentId);
+                if (!node) break;
+                
+                // Find the parent that leads toward OP
+                const commentText = node.data?.comment || node.data?.com || "";
+                const quotedParents = extractParentIds(commentText || "");
+                
+                // Use the earliest quoted parent as the path back to OP
+                const validParents = quotedParents.filter(pid => this.postGraph.nodes.has(pid));
+                if (validParents.length > 0) {
+                    currentId = validParents.sort((a, b) => parseInt(a) - parseInt(b))[0];
+                } else {
+                    break;
+                }
+            }
+            
+            if (currentId === opId) {
+                path.unshift(opId);
+            }
+            
+            return path;
+        }
+    
+        getOrganizedThreads() {
+            const result = [];
+            
+            const sortedRoots = Array.from(this.roots.values())
+                .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+            
+            for (const root of sortedRoots) {
+                const thread = root.getThread();
+                result.push(...thread);
+            }
+            
+            return result;
+        }
+    
+        printTree() {
+            this.log('\n🌳 CONVERSATION TREE STRUCTURE:');
+            
+            const printNode = (reply, indent = '') => {
+                const marker = reply.isOP ? '👑' : reply.children.length > 0 ? '💬' : '💭';
+                const quotes = reply.quotedParents.length > 0 ? ` (→${reply.quotedParents.join(',')})` : '';
+                this.log(`${indent}${marker} L${reply.level}: ${reply.id}${quotes}`);
+                
+                reply.children
+                    .slice()
+                    .sort((a, b) => parseInt(a.id) - parseInt(b.id))
+                    .forEach(child => printNode(child, indent + '  '));
+            };
+            
+            const sortedRoots = Array.from(this.roots.values())
+                .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                
+            sortedRoots.forEach(root => printNode(root));
+        }
+    
+        setDebug(enabled) {
+            this.DEBUG = enabled;
+        }
     }
     // Graph structure to track post relationships
     class PostGraph {
@@ -938,53 +1320,6 @@ function startMainScript() {
             };
 
             return dfs(postId);
-        }
-
-        // Enhanced BFS that shows multiple parent relationships
-        getReplyChainBFS(rootId, includeOP = true) {
-            const result = [];
-            const queue = [{ id: rootId, level: 0 }];
-            const visited = new Set();
-
-            while (queue.length > 0) {
-                const { id, level } = queue.shift();
-
-                if (visited.has(id)) continue;
-                visited.add(id);
-
-                const node = this.nodes.get(id);
-                if (!node) continue;
-
-                if (level === 0 && !includeOP) {
-                    for (const replyId of node.replies) {
-                        if (!visited.has(replyId)) {
-                            queue.push({ id: replyId, level: level + 1 });
-                        }
-                    }
-                    continue;
-                }
-
-                result.push({
-                    id: id,
-                    level: level,
-                    data: node.data,
-                    replies: Array.from(node.replies),
-                    parents: Array.from(node.parents), // Include all parents
-                    parentCount: node.parents.size,
-                });
-
-                // Add children to queue
-                const sortedReplies = Array.from(node.replies).sort(
-                    (a, b) => parseInt(a) - parseInt(b)
-                );
-                for (const replyId of sortedReplies) {
-                    if (!visited.has(replyId)) {
-                        queue.push({ id: replyId, level: level + 1 });
-                    }
-                }
-            }
-
-            return result;
         }
 
         // DFS to find OP/root from any post
@@ -1152,220 +1487,17 @@ function startMainScript() {
             }
         }
         getReplyChainFromPost(startPostId, includeOP = true, maxPosts = Infinity, around = false) {
-            const result = [];
-            const visited = new Set();
-            const levelMap = new Map();
-            const toProcess = new Set();
-
-            this.log(`🚀 Starting reply chain analysis for ${startPostId}, around=${around}`);
-
-            // Step 1: Add OP if requested
-            let opId = null;
-            if (includeOP) {
-                opId = this.findOP(startPostId);
-                if (opId && this.nodes.has(opId) && startPostId !== opId) {
-                    toProcess.add(opId);
-                    levelMap.set(opId, 0);
-                    this.log(`✅ Added OP: ${opId} at L0`);
-                }
+            this.log(`🎯 Getting organized conversation for ${startPostId}`);
+            let mode = around ? 'around' : 'full'
+            const tree = new ConversationTree(this);
+            tree.setDebug(this.DEBUG);
+            tree.buildFromPostGraph(startPostId, mode);
+            
+            if (this.DEBUG) {
+                tree.printTree();
             }
-
-            // Step 2: Collection strategy based on mode
-            if (around) {
-                this.collectAroundContext(startPostId, toProcess);
-            } else {
-                this.collectFullContext(startPostId, toProcess, opId);
-            }
-
-            this.log(`📊 Collected ${toProcess.size} posts:`, Array.from(toProcess).sort());
-
-            const calculateLevel = (postId) => {
-                if (levelMap.has(postId)) {
-                    return levelMap.get(postId);
-                }
-
-                const node = this.nodes.get(postId);
-                if (!node) return 999;
-
-                if (postId === opId) {
-                    levelMap.set(postId, 0);
-                    return 0;
-                }
-
-                // Get actual quoted parents from post content
-                const commentText = node.data?.comment || node.data?.com || "";
-                const quotedParents = extractParentIds(commentText || "").filter(pid => toProcess.has(pid));
-
-                // If quotes OP directly, always level 1
-                if (quotedParents.includes(opId)) {
-                    levelMap.set(postId, 1);
-                    this.log(`🎯 ${postId} -> L1 (quotes OP directly)`);
-                    return 1;
-                }
-
-                // If no quotes, check if it's a direct child of OP in graph
-                if (quotedParents.length === 0) {
-                    if (node.parents && node.parents.has(opId)) {
-                        levelMap.set(postId, 1);
-                        this.log(`🎯 ${postId} -> L1 (direct graph child of OP)`);
-                        return 1;
-                    } else {
-                        levelMap.set(postId, 1);
-                        this.log(`🎯 ${postId} -> L1 (no quotes, assumed L1)`);
-                        return 1;
-                    }
-                }
-
-                // Calculate based on quoted parents
-                const parentLevels = quotedParents
-                    .map(pid => levelMap.get(pid))
-                    .filter(level => level !== undefined);
-
-                if (parentLevels.length === 0) {
-                    return null; // Dependencies not ready
-                }
-
-                // Use minimum parent level + 1 for consistent threading
-                const level = Math.min(...parentLevels) + 1;
-                levelMap.set(postId, level);
-                this.log(`🎯 ${postId} -> L${level} (min parent level ${Math.min(...parentLevels)} + 1)`);
-                return level;
-            };
-
-            // Step 3: Multi-pass processing to handle dependencies
-            const postsToProcess = Array.from(toProcess).filter(id => !visited.has(id));
-            let passes = 0;
-            const maxPasses = 5000;
-
-            this.log(`🔄 Starting multi-pass processing for ${postsToProcess.length} posts`);
-
-            while (postsToProcess.length > 0 && passes < maxPasses) {
-                const processed = [];
-                passes++;
-
-                this.log(`\n=== PASS ${passes} ===`);
-                this.log(`Posts to process: ${postsToProcess}`);
-
-                for (const postId of postsToProcess) {
-                    if (visited.has(postId)) continue;
-
-                    const node = this.nodes.get(postId);
-                    if (!node) continue;
-
-                    const level = calculateLevel(postId);
-                    if (level === null) {
-                        this.log(`⏭️ Skipping ${postId} this pass (dependencies not ready)`);
-                        continue; // Dependencies not ready, skip this pass
-                    }
-
-                    visited.add(postId);
-                    processed.push(postId);
-
-                    // Get actual quoted parents from the post content
-                    const commentText = node.data?.comment || node.data?.com || "";
-                    const quotedParents = extractParentIds(commentText || "").filter(pid => this.nodes.has(pid));
-                    const validQuotedParents = quotedParents.filter(pid => toProcess.has(pid));
-
-                    this.log(`✅ Processed ${postId} at L${level}`);
-
-                    result.push({
-                        id: postId,
-                        level: level,
-                        data: node.data,
-                        replies: Array.from(node.replies),
-                        parents: Array.from(node.parents),
-                        quotedParents: validQuotedParents,
-                        parentCount: node.parents.size,
-                        quotedParentCount: validQuotedParents.length,
-                        isOP: postId === opId
-                    });
-                }
-
-                // Remove processed posts
-                processed.forEach(id => {
-                    const index = postsToProcess.indexOf(id);
-                    if (index > -1) postsToProcess.splice(index, 1);
-                });
-
-                this.log(`✅ Pass ${passes}: Processed ${processed.length} posts, ${postsToProcess.length} remaining`);
-                this.log(`   Processed: ${processed}`);
-                this.log(`   Remaining: ${postsToProcess}`);
-
-                if (processed.length === 0) {
-                    this.log(`🛑 No progress made in pass ${passes}, breaking`);
-                    break
-                }
-            }
-
-            // Process any remaining posts with default level
-            if (postsToProcess.length > 0) {
-                this.log(`\n🚨 Processing ${postsToProcess.length} remaining posts with default levels:`);
-            }
-
-            for (const postId of postsToProcess) {
-                if (visited.has(postId)) continue;
-
-                const node = this.nodes.get(postId);
-                if (!node) continue;
-
-                visited.add(postId);
-
-                const commentText = node.data?.comment || node.data?.com || "";
-                const quotedParents = extractParentIds(commentText || "").filter(pid => this.nodes.has(pid));
-                const validQuotedParents = quotedParents.filter(pid => toProcess.has(pid));
-
-                this.log(`⚠️ ${postId} -> L999 (unresolved dependencies)`);
-                this.log(`   Quoted parents: ${validQuotedParents}`);
-
-                result.push({
-                    id: postId,
-                    level: 999, // High level for unresolved posts - will sort to bottom
-                    data: node.data,
-                    replies: Array.from(node.replies),
-                    parents: Array.from(node.parents),
-                    quotedParents: validQuotedParents,
-                    parentCount: node.parents.size,
-                    quotedParentCount: validQuotedParents.length,
-                    isOP: postId === opId
-                });
-            }
-
-            // Initial sort by level then chronological, to help conversation sorter
-            result.sort((a, b) => {
-                if (a.level !== b.level) {
-                    return a.level - b.level;
-                }
-                return parseInt(a.id) - parseInt(b.id);
-            });
-
-            this.log(`\n📊 Pre-sort result: ${result.length} posts in ${passes} passes`);
-
-            const levelDistribution = result.reduce((acc, post) => {
-                acc[`L${post.level}`] = (acc[`L${post.level}`] || 0) + 1;
-                return acc;
-            }, {});
-
-            this.log(`📈 Level distribution:`, levelDistribution);
-
-            // Sort by conversation threads, not just levels
-            // Deduplicate posts by ID while preserving order
-            const uniqueResults = Array.from(new Map(result.map(post => [post.id, post])).values());
-
-            // Log deduplication stats
-            if (result.length !== uniqueResults.length) {
-                this.log(`🔍 Deduplicated ${result.length - uniqueResults.length} duplicate posts`);
-            }
-
-            const finalResult = this.sortByConversationFlow(result);
-
-            this.log(`\n📋 Final Sorted Results:`);
-            finalResult.forEach(post => {
-                const quotedText = post.quotedParents.length > 0 ? ` (quotes: ${post.quotedParents})` : '';
-                const graphParentsText = post.parents.length > 0 ? ` [graph: ${post.parents}]` : '';
-                this.log(`   L${post.level}: ${post.id}${quotedText}${graphParentsText}`);
-            });
-
-            return finalResult;
+            
+            return tree.getOrganizedThreads();
         }
         // Build this ONCE when parsing the thread, not during every traversal
         buildReverseQuoteIndex() {
@@ -1453,7 +1585,6 @@ function startMainScript() {
                     }
                 });
 
-                if(id == opId) return
                 // Backward: Add quoted posts
                 const commentText = node.data?.comment || node.data?.com || "";
                 const quotedParents = extractParentIds(commentText || "");
@@ -1476,18 +1607,24 @@ function startMainScript() {
             }
         }
 
+        
+        // Toggle debugging
+        setDebug(enabled) {
+            this.DEBUG = enabled;
+            this.log(`🔧 Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+        }
         // Alternative: Show conversation thread around a specific post
         getConversationAround(postId, includeOP = true, maxDepth = 3) {
             this.log(`🎯 Getting conversation around ${postId}, depth=${maxDepth}`);
-
+    
             const result = [];
             const visited = new Set();
-
+    
             // Add OP if requested
             if (includeOP) {
                 const opId = this.findOP(postId);
                 const opNode = this.nodes.get(opId);
-
+    
                 if (opNode && opId !== postId) {
                     result.push({
                         id: opId,
@@ -1502,19 +1639,19 @@ function startMainScript() {
                     this.log(`👑 Added OP: ${opId}`);
                 }
             }
-
+    
             // BFS from current post with limited depth
             const queue = [{ id: postId, level: 1 }];
-
+    
             while (queue.length > 0) {
                 const { id, level } = queue.shift();
-
+    
                 if (visited.has(id) || level > maxDepth) continue;
                 visited.add(id);
-
+    
                 const node = this.nodes.get(id);
                 if (!node) continue;
-
+    
                 result.push({
                     id: id,
                     level: level,
@@ -1524,28 +1661,69 @@ function startMainScript() {
                     parentCount: node.parents.size,
                     isOP: id === this.findOP(postId),
                 });
-
+    
                 this.log(`✅ Added post ${id} at L${level}`);
-
+    
                 // Only add immediate replies (limited expansion)
                 const recentReplies = Array.from(node.replies)
                     .sort((a, b) => parseInt(a) - parseInt(b))
-
+    
                 for (const replyId of recentReplies) {
                     if (!visited.has(replyId)) {
                         queue.push({ id: replyId, level: level + 1 });
                     }
                 }
             }
-
+    
             this.log(`📊 Conversation around ${postId}: ${result.length} posts`);
             return result;
         }
 
-        // Toggle debugging
-        setDebug(enabled) {
-            this.DEBUG = enabled;
-            this.log(`🔧 Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+        // Enhanced BFS that shows multiple parent relationships
+        getReplyChainBFS(rootId, includeOP = true) {
+            const result = [];
+            const queue = [{ id: rootId, level: 0 }];
+            const visited = new Set();
+
+            while (queue.length > 0) {
+                const { id, level } = queue.shift();
+
+                if (visited.has(id)) continue;
+                visited.add(id);
+
+                const node = this.nodes.get(id);
+                if (!node) continue;
+
+                if (level === 0 && !includeOP) {
+                    for (const replyId of node.replies) {
+                        if (!visited.has(replyId)) {
+                            queue.push({ id: replyId, level: level + 1 });
+                        }
+                    }
+                    continue;
+                }
+
+                result.push({
+                    id: id,
+                    level: level,
+                    data: node.data,
+                    replies: Array.from(node.replies),
+                    parents: Array.from(node.parents), // Include all parents
+                    parentCount: node.parents.size,
+                });
+
+                // Add children to queue
+                const sortedReplies = Array.from(node.replies).sort(
+                    (a, b) => parseInt(a) - parseInt(b)
+                );
+                for (const replyId of sortedReplies) {
+                    if (!visited.has(replyId)) {
+                        queue.push({ id: replyId, level: level + 1 });
+                    }
+                }
+            }
+
+            return result;
         }
     }
     // Global graph instance
@@ -2782,69 +2960,67 @@ function startMainScript() {
             '<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>'
         );
         $container.append($status);
-
+    
         let processed = 0;
-
-        for (const {
-            id,
-            level,
-            data,
-            replies,
-            parents,
-            quotedParents,
-            parentCount,
-            quotedParentCount,
-            isOP,
-        } of replyChain) {
+    
+        for (const item of replyChain) {
             try {
-                // Use quotedParents if available, fallback to extracting from content
-                const displayParents =
-                    quotedParents && quotedParents.length > 0
-                        ? quotedParents
-                        : extractParentIds(data?.comment || data?.com || "").filter((pid) =>
-                            replyChain.some((item) => item.id === pid)
-                        );
-
-                // Create level indicator with better multi-parent info
-                const $levelHeader =
-                    $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${isOP ? "#773311" : "#555"
-                        };">
-              ${isOP ? "OP" : `L${level}`} (${replies.length}↓${displayParents.length
-                        }↑)
-              ${displayParents.length > 0
-                            ? ` ← [${displayParents.join(", ")}]`
-                            : ""
-                        }
-              ${parentCount !== displayParents.length
-                            ? ` (graph: ${parentCount} parents)`
-                            : ""
-                        }
-          </div>`);
+                // FIXED: Handle both old and new data structures
+                const {
+                    id,
+                    level = 0,
+                    data,
+                    replies = [], // Default to empty array
+                    parents = [], // Default to empty array  
+                    quotedParents = [],
+                    parentCount = 0,
+                    quotedParentCount = 0,
+                    isOP = false,
+                    hasChildren = false // New property from ConversationTree
+                } = item;
+    
+                // Use actual reply count from the structure
+                const replyCount = hasChildren !== undefined 
+                    ? (hasChildren ? '??' : '0') // Use hasChildren if available
+                    : (replies?.length || 0); // Fallback to replies array
+    
+                const parentList = quotedParents && quotedParents.length > 0
+                    ? quotedParents
+                    : extractParentIds(data?.comment || data?.com || "").filter((pid) =>
+                        replyChain.some((item) => item.id === pid)
+                    );
+    
+                // Create level indicator with safety checks
+                const $levelHeader = $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${
+                    isOP ? "#773311" : "#555"
+                };">
+                    ${isOP ? "OP" : `L${level}`} (${replyCount}↓${parentList.length}↑)
+                    ${parentList.length > 0 ? ` ← [${parentList.join(", ")}]` : ""}
+                    ${parentCount !== parentList.length ? ` (graph: ${parentCount} parents)` : ""}
+                </div>`);
+                
                 $container.append($levelHeader);
-
+    
                 // Create post container with level-based indentation
                 const $postContainer = $('<div class="chain-post"></div>');
                 $postContainer.css({
-                    margin: "2px 0 5px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px", // Cap max indentation
-                    "border-left":
-                        level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none", // Thicker border for deeper levels
+                    margin: "2px 0 5px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
+                    "border-left": level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none",
                     "padding-left": level > 0 && !isOP ? "5px" : "0",
                     border: isOP ? "2px solid #773311" : "1px solid #000",
-                    background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa", // Different bg for deep levels
+                    background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa",
                     "font-size": "13px",
                 });
-
+    
                 // Add hide/unhide button
                 const $toggleBtn = $(
                     '<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>'
                 );
-
+    
                 if (data) {
                     const postElement = createPostElement(data);
-                    const $postContent = $('<div class="post-content"></div>').html(
-                        postElement
-                    );
-
+                    const $postContent = $('<div class="post-content"></div>').html(postElement);
+    
                     $toggleBtn.click(() => {
                         if ($postContent.is(":visible")) {
                             $postContent.hide();
@@ -2854,10 +3030,10 @@ function startMainScript() {
                             $toggleBtn.text("[−]");
                         }
                     });
-
+    
                     $postContainer.append($toggleBtn);
                     $postContainer.append($postContent);
-
+    
                     // Process the post
                     setTimeout(() => {
                         const $createdPost = $postContainer.find("article.post");
@@ -2876,16 +3052,17 @@ function startMainScript() {
                         `<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`
                     );
                 }
-
+    
                 $container.append($postContainer);
                 processed++;
-
                 $status.text(`${processed}/${replyChain.length} posts`);
+    
             } catch (error) {
-                console.error(`Error displaying post ${id}:`, error);
+                console.error(`Error displaying post ${item.id || 'unknown'}:`, error);
+                // Continue with next post instead of breaking
             }
         }
-
+    
         $status.text(`Complete: ${processed} posts`);
     }
     function getContinentColor(country) {
