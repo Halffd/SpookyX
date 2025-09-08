@@ -874,40 +874,40 @@ function startMainScript() {
             this.quotedParents = [];
             this.isOP = false;
         }
-    
+
         addChild(reply) {
             reply.parent = this;
             reply.level = this.level + 1;
             this.children.push(reply);
             return reply;
         }
-    
+
         getAllDescendants() {
             const result = [];
-            
+
             const traverse = (reply) => {
                 result.push(reply);
                 const sortedChildren = reply.children
                     .slice()
                     .sort((a, b) => parseInt(a.id) - parseInt(b.id));
-                
+
                 sortedChildren.forEach(child => traverse(child));
             };
-            
+
             traverse(this);
             return result;
         }
-    
+
         findById(postId) {
             if (this.id === postId) return this;
-            
+
             for (const child of this.children) {
                 const found = child.findById(postId);
                 if (found) return found;
             }
             return null;
         }
-    
+
         getThread() {
             return this.getAllDescendants().map(reply => ({
                 id: reply.id,
@@ -920,7 +920,7 @@ function startMainScript() {
             }));
         }
     }
-    
+
     class ConversationTree {
         constructor(postGraph) {
             this.postGraph = postGraph;
@@ -928,19 +928,19 @@ function startMainScript() {
             this.allReplies = new Map();
             this.DEBUG = true;
         }
-    
+
         log(...args) {
             if (this.DEBUG) console.log(...args);
         }
-    
-        buildFromPostGraph(startPostId, mode = 'around') {
+
+        buildFromPostGraph(startPostId, mode = 'around', includeOp = true) {
             this.log(`🏗️ Building tree from PostGraph for ${startPostId} (${mode})`);
-            
+
             this.roots.clear();
             this.allReplies.clear();
-            
-            const relevantPosts = this.collectRelevantPosts(startPostId, mode);
-            
+
+            const relevantPosts = this.collectRelevantPosts(startPostId, mode, includeOp);
+
             // Create Reply objects
             relevantPosts.forEach(postId => {
                 const node = this.postGraph.nodes.get(postId);
@@ -953,18 +953,18 @@ function startMainScript() {
                     this.allReplies.set(postId, reply);
                 }
             });
-            
+
             // SIMPLIFIED tree building - just use quote relationships directly
             this.buildSimpleTree();
-            
+
             return this;
         }
         attachToParent(reply, processed, processing) {
             processing.add(reply.id);
-            
+
             let bestParent = null;
             let bestScore = -1;
-            
+
             for (const quotedId of reply.quotedParents) {
                 if (!this.allReplies.has(quotedId)) continue;
                 if (!processed.has(quotedId)) {
@@ -975,108 +975,97 @@ function startMainScript() {
                     this.log(`🔄 Cycle detected: ${reply.id} -> ${quotedId}`);
                     continue;
                 }
-                
+
                 const parentReply = this.allReplies.get(quotedId);
-                
+
                 // FIXED: Score parents by chronological order AND tree depth
                 // Prefer the LATEST quoted post that's still before this reply
                 const chronologicalScore = parseInt(quotedId);
                 const depthPenalty = parentReply.level * 100; // Small penalty for deeper nesting
                 const score = chronologicalScore - depthPenalty;
-                
+
                 if (score > bestScore) {
                     bestScore = score;
                     bestParent = parentReply;
                 }
             }
-            
+
             processing.delete(reply.id);
-            
+
             if (bestParent) {
                 bestParent.addChild(reply);
                 this.log(`✅ Multi-quote ${reply.id} attached to latest parent ${bestParent.id} (score: ${bestScore})`);
                 return true;
             }
-            
+
             return false;
         }
-        // MUCH SIMPLER tree building approach
         buildSimpleTree() {
             this.log(`🌳 Building simple tree structure`);
-            
-            // Step 1: Find all root posts (OP or posts with no quoted parents in our set)
+
+            const processed = new Set(); // MISSING - need to track processed posts
+
+            // Step 1: Find all root posts
             for (const [postId, reply] of this.allReplies.entries()) {
                 if (reply.isOP || reply.quotedParents.length === 0) {
                     this.roots.set(postId, reply);
                     reply.level = 0;
+                    processed.add(postId); // MARK AS PROCESSED
                     this.log(`🎯 Root found: ${postId} (isOP: ${reply.isOP})`);
                 }
             }
-            
+
             // Step 2: Build the tree in multiple passes
             let maxPasses = 10;
             let pass = 0;
             let changed = true;
-            
+
             while (changed && pass < maxPasses) {
                 pass++;
                 changed = false;
+                const processing = new Set(); // MISSING - need for cycle detection
                 this.log(`\n=== PASS ${pass} ===`);
-                
+
                 for (const [postId, reply] of this.allReplies.entries()) {
-                    // Skip if already attached
-                    if (reply.parent !== null || this.roots.has(postId)) continue;
-                    
-                    // Try to find a parent among quoted posts
-                    let bestParent = null;
-                    for (const quotedId of reply.quotedParents) {
-                        const parentReply = this.allReplies.get(quotedId);
-                        if (parentReply && (parentReply.parent !== null || this.roots.has(quotedId))) {
-                            // Parent is already placed in tree
-                            if (!bestParent || parseInt(quotedId) < parseInt(bestParent.id)) {
-                                bestParent = parentReply;
-                            }
-                        }
-                    }
-                    
-                    if (bestParent) {
-                        bestParent.addChild(reply);
+                    if (processed.has(postId)) continue; // Skip already processed
+
+                    const success = this.attachToParent(reply, processed, processing);
+                    if (success) {
+                        processed.add(postId);
                         changed = true;
-                        this.log(`✅ Attached ${postId} to ${bestParent.id} at level ${reply.level}`);
+                        this.log(`✅ Attached ${postId} to ${reply.parent?.id} at level ${reply.level}`);
                     }
                 }
             }
-            
-            // Step 3: Any remaining unattached posts become roots
+
+            // Step 3: Remaining posts become roots
             for (const [postId, reply] of this.allReplies.entries()) {
-                if (reply.parent === null && !this.roots.has(postId)) {
+                if (!processed.has(postId)) {
                     this.roots.set(postId, reply);
                     reply.level = 0;
                     this.log(`🌱 Orphan became root: ${postId}`);
                 }
             }
-            
+
             this.log(`\n📊 Final tree: ${this.roots.size} roots, ${this.allReplies.size} total posts`);
         }
-    
-        // Keep existing methods: collectRelevantPosts, getOrganizedThreads, printTree, etc.
-        collectRelevantPosts(startPostId, mode) {
+        collectRelevantPosts(startPostId, mode, includeOp = true) {
             const relevant = new Set();
             const visited = new Set();
-            
+
             this.log(`📦 Collecting posts for ${startPostId} in ${mode} mode`);
-        
+
             if (mode === 'around') {
                 // AROUND MODE: Tight focus, minimal OP replies
                 relevant.add(startPostId);
-                
+
                 const startNode = this.postGraph.nodes.get(startPostId);
                 if (startNode) {
                     // Add OP but be VERY careful with its replies
                     const opId = this.postGraph.findOP(startPostId);
                     if (opId) {
                         relevant.add(opId);
-                        
+
                         // CRITICAL: Only add OP replies that are in our conversation chain
                         const opNode = this.postGraph.nodes.get(opId);
                         if (opNode && opId !== startPostId) {
@@ -1085,21 +1074,23 @@ function startMainScript() {
                             pathToStart.forEach(postId => relevant.add(postId));
                         }
                     }
-                    
+
                     // Add what this post quotes (parents)
-                    const commentText = startNode.data?.comment || startNode.data?.com || "";
-                    const quotedParents = extractParentIds(commentText || "");
-                    quotedParents.forEach(pid => {
-                        if (this.postGraph.nodes.has(pid)) {
-                            relevant.add(pid);
-                        }
-                    });
-                    
+                    /*if(startNode !== startPostId){
+                        const commentText = startNode.data?.comment || startNode.data?.com || "";
+                        const quotedParents = extractParentIds(commentText || "");
+                        quotedParents.forEach(pid => {
+                            if (this.postGraph.nodes.has(pid)) {
+                                relevant.add(pid);
+                            }
+                        });
+                    }*/
+
                     // Add direct replies to this post (limited)
                     Array.from(startNode.replies).forEach(replyId => {
                         relevant.add(replyId);
                     });
-                    
+
                     // Add replies to quoted posts (but NOT if they're OP)
                     quotedParents.forEach(pid => {
                         if (pid !== opId) { // Skip OP replies here
@@ -1117,24 +1108,24 @@ function startMainScript() {
                 const queue = [startPostId];
                 let maxPosts = 300000; // Reduced limit
                 let collected = 0;
-        
+
                 while (queue.length > 0 && collected < maxPosts) {
                     const currentId = queue.shift();
                     if (visited.has(currentId)) continue;
-                    
+
                     visited.add(currentId);
                     relevant.add(currentId);
                     collected++;
-                    
+
                     const node = this.postGraph.nodes.get(currentId);
                     if (!node) continue;
-        
+
                     // Add OP but with EXTREME caution
                     const opId = this.postGraph.findOP(currentId);
                     if (opId && !relevant.has(opId) && collected < maxPosts) {
                         relevant.add(opId);
                         collected++;
-                        
+
                         // CRITICAL: DO NOT add OP replies in full mode unless they're direct ancestors
                         // Only add the path from OP to our conversation
                         if (currentId !== opId) {
@@ -1147,7 +1138,7 @@ function startMainScript() {
                             });
                         }
                     }
-        
+
                     // Add quoted posts (backward links)
                     const commentText = node.data?.comment || node.data?.com || "";
                     const quotedParents = extractParentIds(commentText || "");
@@ -1156,9 +1147,9 @@ function startMainScript() {
                             queue.push(pid);
                         }
                     });
-        
+
                     // Add replies - but SKIP if current post is OP
-                    if (currentId !== opId) {
+                    if (currentId !== opId || startPostId === opId) {
                         Array.from(node.replies).forEach(replyId => {
                             if (!visited.has(replyId) && collected < maxPosts) {
                                 queue.push(replyId);
@@ -1170,28 +1161,33 @@ function startMainScript() {
                     }
                 }
             }
-        
+            if(!includeOp){
+                const opId = this.postGraph.findOP(startPostId);
+                if(opId){
+                    relevant.delete(opId);
+                }
+            }
             this.log(`📦 Collected ${relevant.size} relevant posts (mode: ${mode})`);
             return relevant;
         }
-        
+
         // Helper method to get the path from OP to a specific post
         getPathFromOpToPost(opId, targetPostId) {
             const path = [];
             let currentId = targetPostId;
             const visited = new Set();
-            
+
             while (currentId && currentId !== opId && !visited.has(currentId)) {
                 visited.add(currentId);
                 path.unshift(currentId);
-                
+
                 const node = this.postGraph.nodes.get(currentId);
                 if (!node) break;
-                
+
                 // Find the parent that leads toward OP
                 const commentText = node.data?.comment || node.data?.com || "";
                 const quotedParents = extractParentIds(commentText || "");
-                
+
                 // Use the earliest quoted parent as the path back to OP
                 const validParents = quotedParents.filter(pid => this.postGraph.nodes.has(pid));
                 if (validParents.length > 0) {
@@ -1200,48 +1196,48 @@ function startMainScript() {
                     break;
                 }
             }
-            
+
             if (currentId === opId) {
                 path.unshift(opId);
             }
-            
+
             return path;
         }
-    
+
         getOrganizedThreads() {
             const result = [];
-            
+
             const sortedRoots = Array.from(this.roots.values())
                 .sort((a, b) => parseInt(a.id) - parseInt(b.id));
-            
+
             for (const root of sortedRoots) {
                 const thread = root.getThread();
                 result.push(...thread);
             }
-            
+
             return result;
         }
-    
+
         printTree() {
             this.log('\n🌳 CONVERSATION TREE STRUCTURE:');
-            
+
             const printNode = (reply, indent = '') => {
                 const marker = reply.isOP ? '👑' : reply.children.length > 0 ? '💬' : '💭';
                 const quotes = reply.quotedParents.length > 0 ? ` (→${reply.quotedParents.join(',')})` : '';
                 this.log(`${indent}${marker} L${reply.level}: ${reply.id}${quotes}`);
-                
+
                 reply.children
                     .slice()
                     .sort((a, b) => parseInt(a.id) - parseInt(b.id))
                     .forEach(child => printNode(child, indent + '  '));
             };
-            
+
             const sortedRoots = Array.from(this.roots.values())
                 .sort((a, b) => parseInt(a.id) - parseInt(b.id));
-                
+
             sortedRoots.forEach(root => printNode(root));
         }
-    
+
         setDebug(enabled) {
             this.DEBUG = enabled;
         }
@@ -1486,17 +1482,17 @@ function startMainScript() {
                 }
             }
         }
-        getReplyChainFromPost(startPostId, includeOP = true, maxPosts = Infinity, around = false) {
+        getReplyChainFromPost(startPostId, includeOP = true, around = false) {
             this.log(`🎯 Getting organized conversation for ${startPostId}`);
             let mode = around ? 'around' : 'full'
             const tree = new ConversationTree(this);
             tree.setDebug(this.DEBUG);
-            tree.buildFromPostGraph(startPostId, mode);
-            
+            tree.buildFromPostGraph(startPostId, mode, includeOP);
+
             if (this.DEBUG) {
                 tree.printTree();
             }
-            
+
             return tree.getOrganizedThreads();
         }
         // Build this ONCE when parsing the thread, not during every traversal
@@ -1607,7 +1603,7 @@ function startMainScript() {
             }
         }
 
-        
+
         // Toggle debugging
         setDebug(enabled) {
             this.DEBUG = enabled;
@@ -1616,15 +1612,15 @@ function startMainScript() {
         // Alternative: Show conversation thread around a specific post
         getConversationAround(postId, includeOP = true, maxDepth = 3) {
             this.log(`🎯 Getting conversation around ${postId}, depth=${maxDepth}`);
-    
+
             const result = [];
             const visited = new Set();
-    
+
             // Add OP if requested
             if (includeOP) {
                 const opId = this.findOP(postId);
                 const opNode = this.nodes.get(opId);
-    
+
                 if (opNode && opId !== postId) {
                     result.push({
                         id: opId,
@@ -1639,19 +1635,19 @@ function startMainScript() {
                     this.log(`👑 Added OP: ${opId}`);
                 }
             }
-    
+
             // BFS from current post with limited depth
             const queue = [{ id: postId, level: 1 }];
-    
+
             while (queue.length > 0) {
                 const { id, level } = queue.shift();
-    
+
                 if (visited.has(id) || level > maxDepth) continue;
                 visited.add(id);
-    
+
                 const node = this.nodes.get(id);
                 if (!node) continue;
-    
+
                 result.push({
                     id: id,
                     level: level,
@@ -1661,20 +1657,20 @@ function startMainScript() {
                     parentCount: node.parents.size,
                     isOP: id === this.findOP(postId),
                 });
-    
+
                 this.log(`✅ Added post ${id} at L${level}`);
-    
+
                 // Only add immediate replies (limited expansion)
                 const recentReplies = Array.from(node.replies)
                     .sort((a, b) => parseInt(a) - parseInt(b))
-    
+
                 for (const replyId of recentReplies) {
                     if (!visited.has(replyId)) {
                         queue.push({ id: replyId, level: level + 1 });
                     }
                 }
             }
-    
+
             this.log(`📊 Conversation around ${postId}: ${result.length} posts`);
             return result;
         }
@@ -2800,10 +2796,8 @@ function startMainScript() {
         ) {
             return;
         }
-
+        
         const backlinkCount = $post.find(".backlinks .backlink").length;
-
-        if (backlinkCount >= 0) {
             const $expandBtn = $(
                 '<a href="#" class="btnr parent expand-all-btn">Exp(' +
                 backlinkCount +
@@ -2816,15 +2810,13 @@ function startMainScript() {
                 expandAllQuotes(post, true); // Include OP
             });
             const $expandBtn2 = $(
-                '<a href="#" class="btnr parent expand-around-btn">Ard(' +
-                backlinkCount +
-                ")</a>"
+                '<a href="#" class="btnr parent expand-around-btn">Ard</a>'
             );
 
             $expandBtn2.click(function(e) {
                 e.preventDefault();
                 const $btn = $(this);
-                expandAllQuotes(post, false, true); // Include OP
+                expandAllQuotes(post, e.shiftKey, true);
             });
 
             const $expandBtn3 = $(
@@ -2835,6 +2827,15 @@ function startMainScript() {
                 e.preventDefault();
                 const $btn = $(this);
                 expandAllQuotes(post, true, false, true); // Include OP
+            });
+            const $expandBtn4 = $(
+                '<a href="#" class="btnr parent expand-around-btn">NOP</a>'
+            );
+
+            $expandBtn4.click(function(e) {
+                e.preventDefault();
+                const $btn = $(this);
+                expandAllQuotes(post, false);
             });
             // specific post expand input
             const $input = $(
@@ -2850,32 +2851,33 @@ function startMainScript() {
                         const $replies = $post.find(".backlinks .backlink");
                         const randomPosts = $replies.sort(() => 0.5 - Math.random()).slice(0, postCount);
                         if (randomPosts.length === 0) {
-                            alert("No replies found to expand.");
                             return;
                         }
+                        const replies = []
                         randomPosts.each((_, link) => {
                             const $link = $(link);
-                            const board = $link.data("board");
-                            const postId = $link.data("post");
-                            if (board && postId) {
-                                const postKey = `${board}:${postId}`;
+                            const postId = $link.text().replace('>>', '');
+                            if (postId) {
+                                const postKey = `${postId}`;
                                 if (!autoExpandProcessed.has(postKey)) {
                                     autoExpandProcessed.add(postKey);
-                                    $btn.addClass("expanding").text("Building Graph...");
-                                    expandAllQuotes(post, false);
+                                    replies.push(postId)
                                 }
                             }
                             $link.css({ backgroundColor: "#447744" });
                         });
+                        if(replies.length > 0){
+                            expandAllQuotes(post, false, false, false, replies);
+                        }
                     }
                 }
             });
             $postControls.append($expandBtn);
             $postControls.append($expandBtn2);
             $postControls.append($expandBtn3);
+            $postControls.append($expandBtn4);
             $postControls.append($input);
         }
-    }
     var updS = () => { };
 
     // Enhanced expandAllQuotes with graph traversal
@@ -2883,7 +2885,8 @@ function startMainScript() {
         postElement,
         includeOP = true,
         around = false,
-        all = false
+        all = false,
+        ids = null
     ) => {
         if (!postElement || !postElement.id) {
             console.warn("Invalid post element");
@@ -2904,7 +2907,7 @@ function startMainScript() {
         // Create container
         const $expandedContainer = $('<div class="expanded-posts-container"></div>');
         $expandedContainer.css({
-            border: "2px solid #773311",
+            border: "2px solid #111111",
             padding: "15px",
             "margin-top": "20px",
             "background-color": "rgba(0, 0, 0, 0.05)",
@@ -2929,24 +2932,32 @@ function startMainScript() {
             "font-size": "16px",
         });
         $closeButton.click(() => {
-            $expandedContainer.remove();
+            let isHidden = $expandedContainer.is(":hidden");
+            $expandedContainer.css({
+                "display": isHidden ? "block" : "none",
+            });
             $(postElement)
                 .find(".expand-all-btn")
                 .removeClass("disabled")
                 .text("Expand All");
         });
 
-        $header.append($closeButton);
+        $postWrapper.append($closeButton);
         $expandedContainer.append($header);
         $postWrapper.append($expandedContainer);
 
         try {
-            const p = around
-                ? currentPostId
-                : all ? postGraph.findRoot(currentPostId)
-                    : postGraph.findPenultimateRoot(currentPostId);
-            const replyChain = postGraph.getReplyChainFromPost(p, includeOP);
-            await displayReplyChain(replyChain, $expandedContainer);
+            let ps = ids ? ids : [currentPostId];
+            const replies = []
+            for(let id of ps){
+                id = id.replace(/^r/, "");
+                const p = all ? postGraph.findRoot(id)
+                        : postGraph.findPenultimateRoot(id);
+                const replyChain = postGraph.getReplyChainFromPost(p, includeOP, around);
+                replies.push(...replyChain);
+            }
+            await displayReplyChain(replies, $expandedContainer);
+            $postElement.find(".text").delete();
         } catch (error) {
             console.error("Error in graph expansion:", error);
             $expandedContainer.append(
@@ -2957,12 +2968,12 @@ function startMainScript() {
     // Display reply chain in BFS order
     async function displayReplyChain(replyChain, $container) {
         const $status = $(
-            '<div class="chain-status" style="font-size: 11px; color: #666; margin: 2px 0;"></div>'
+            '<div class="chain-status" style="font-size: 11px; color: #666; margin: 1px 0;"></div>'
         );
         $container.append($status);
-    
+
         let processed = 0;
-    
+
         for (const item of replyChain) {
             try {
                 // FIXED: Handle both old and new data structures
@@ -2971,25 +2982,25 @@ function startMainScript() {
                     level = 0,
                     data,
                     replies = [], // Default to empty array
-                    parents = [], // Default to empty array  
+                    parents = [], // Default to empty array
                     quotedParents = [],
                     parentCount = 0,
                     quotedParentCount = 0,
                     isOP = false,
                     hasChildren = false // New property from ConversationTree
                 } = item;
-    
+
                 // Use actual reply count from the structure
-                const replyCount = hasChildren !== undefined 
+                const replyCount = hasChildren !== undefined
                     ? (hasChildren ? '??' : '0') // Use hasChildren if available
                     : (replies?.length || 0); // Fallback to replies array
-    
+
                 const parentList = quotedParents && quotedParents.length > 0
                     ? quotedParents
                     : extractParentIds(data?.comment || data?.com || "").filter((pid) =>
                         replyChain.some((item) => item.id === pid)
                     );
-    
+
                 // Create level indicator with safety checks
                 const $levelHeader = $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${
                     isOP ? "#773311" : "#555"
@@ -2998,29 +3009,29 @@ function startMainScript() {
                     ${parentList.length > 0 ? ` ← [${parentList.join(", ")}]` : ""}
                     ${parentCount !== parentList.length ? ` (graph: ${parentCount} parents)` : ""}
                 </div>`);
-                
+
                 $container.append($levelHeader);
-    
+
                 // Create post container with level-based indentation
                 const $postContainer = $('<div class="chain-post"></div>');
                 $postContainer.css({
-                    margin: "2px 0 5px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
+                    margin: "1px 0 2px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
                     "border-left": level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none",
-                    "padding-left": level > 0 && !isOP ? "5px" : "0",
-                    border: isOP ? "2px solid #773311" : "1px solid #000",
+                    "padding-left": level > 0 && !isOP ? "3px" : "0",
+                    border: "1px solid #000",
                     background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa",
                     "font-size": "13px",
                 });
-    
+
                 // Add hide/unhide button
                 const $toggleBtn = $(
                     '<button class="toggle-post-btn" style="float: right; font-size: 10px; padding: 1px 3px; margin: 2px; border: 1px solid #999; background: #eee; cursor: pointer;">[−]</button>'
                 );
-    
+
                 if (data) {
                     const postElement = createPostElement(data);
                     const $postContent = $('<div class="post-content"></div>').html(postElement);
-    
+
                     $toggleBtn.click(() => {
                         if ($postContent.is(":visible")) {
                             $postContent.hide();
@@ -3030,10 +3041,10 @@ function startMainScript() {
                             $toggleBtn.text("[−]");
                         }
                     });
-    
+
                     $postContainer.append($toggleBtn);
                     $postContainer.append($postContent);
-    
+
                     // Process the post
                     setTimeout(() => {
                         const $createdPost = $postContainer.find("article.post");
@@ -3052,17 +3063,17 @@ function startMainScript() {
                         `<div class="missing-post" style="color: #999; font-style: italic; padding: 3px;">Post ${id} not available</div>`
                     );
                 }
-    
+
                 $container.append($postContainer);
                 processed++;
                 $status.text(`${processed}/${replyChain.length} posts`);
-    
+
             } catch (error) {
                 console.error(`Error displaying post ${item.id || 'unknown'}:`, error);
                 // Continue with next post instead of breaking
             }
         }
-    
+
         $status.text(`Complete: ${processed} posts`);
     }
     function getContinentColor(country) {
@@ -3209,14 +3220,7 @@ function startMainScript() {
 
         let $p = $(post);
 
-        // Style the OP post
-        if ($p.hasClass("post_is_op")) {
-            $p.css({
-                border: "2px solid #AF3355",
-                "background-color": "#FFF0F3", // Optional, to emphasize OP more
-            });
-        }
-
+        
         // Find the correct anchor element
         let aElem = $p.find('.post_data a[data-function="highlight"]').first();
         if (aElem.length === 0) {
@@ -3231,9 +3235,21 @@ function startMainScript() {
             // Use your existing fetchRepliesWithRetry function
             let replies = await fetchRepliesWithRetry(aElem, wait * 500, wait);
 
+            // Style the OP post
+            if ($p.hasClass("post_is_op")) {
+                $p.css({
+                    border: "2px solid #AF3355",
+                    "background-color": "#FFF0F3", // Optional, to emphasize OP more
+                });
+                const replies = postGraph.nodes.get(id).replies.size
+                let c = $p.find(".post_type") ?? $p
+                c.append(`Replies: ${replies - 1}`)
+            }
+
+            // Add individual expand button to post controls
+            addExpandButtonToPost(post);
             if (!replies || replies.length === 0) {
                 console.log(`No replies found for post ${id}`);
-                addExpandButtonToPost(post);
                 processedPosts++;
                 return;
             }
@@ -3259,9 +3275,6 @@ function startMainScript() {
             for (let r of repliesElems) {
                 $backlinksContainer.append(r);
             }
-
-            // Add individual expand button to post controls
-            addExpandButtonToPost(post);
 
             console.log("Replies: ", replies, repliesElems);
             processedPosts++;
