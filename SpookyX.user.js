@@ -2854,41 +2854,35 @@
 
     // Modified fetchData function
     const fetchData = async (url, data) => {
-      return new Promise((resolve, reject) => {
-        const params = new URLSearchParams(data).toString();
-        let fullUrl = params ? `${url}?${params}` : url;
-        //const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-        //fullUrl = `https://corsproxy.io/?${encodeURIComponent(fullUrl)}`; //proxyUrl + fullUrl
+    return new Promise((resolve, reject) => {
+        const params = data ? new URLSearchParams(data).toString() : '';
+        const fullUrl = params ? `${url}?${params}` : url;
 
-        GM_xmlhttpRequest({
-          method: "GET",
-          url: fullUrl,
-          timeout: 15000,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            Accept: "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          onload: (response) => {
-            try {
-              const json = JSON.parse(response.responseText);
-              resolve(json);
-            } catch (e) {
-              reject(new Error("Invalid JSON response"));
+        $.ajax({
+            url: fullUrl,
+            method: 'GET',
+            timeout: 150000,
+            headers: {
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+                resolve(response);
+            },
+            error: function(xhr, status, error) {
+                console.error('jQuery AJAX error:', {
+                    status: xhr.status,
+                    statusText: xhr.statusText,
+                    responseText: xhr.responseText,
+                    error: error
+                });
+                reject(new Error(`${status}: ${error}`));
             }
-          },
-          onerror: (error) => reject(error),
-          ontimeout: () => reject(new Error("Request timeout")),
         });
-      });
-    };
+    });
+};
     // Get replies for a given link
     const fetchReplies = async (link) => {
       const [threadId, postNumber] = extractThreadInfo(link);
@@ -3189,15 +3183,25 @@
   });
 
   // simplified scroll handler - just scale it up when container scrolled past
-  const scrollHandler = () => {
-      let containerRect = $expandedContainer[0].getBoundingClientRect();
-      let isContainerScrolledPast = containerRect.top < 50; // adjust threshold
+const scrollHandler = () => {
+    let containerRect = $expandedContainer[0].getBoundingClientRect();
+    let isContainerVisible = containerRect.top < window.innerHeight && containerRect.bottom > 50;
 
-      $closeButton.css({
-          transform: isContainerScrolledPast ? "scale(1.2)" : "scale(1)",
-          padding: isContainerScrolledPast ? "6px 10px" : "4px 8px"
-      });
-  };
+    if (isContainerVisible) {
+        // container is visible - show button fixed to top-left of viewport
+        $closeButton.css({
+            position: "fixed",
+            top: "20px",     // always 20px from top of screen
+            left: "20px",    // always 20px from left of screen
+            display: "block"
+        });
+    } else {
+        // container not visible - hide button
+        $closeButton.css({
+            display: "none"
+        });
+    }
+};
 
       $(window).on('scroll', scrollHandler);
 
@@ -8820,6 +8824,37 @@
             handleClicks(links.toArray()); // Handle clicks on non-inlined links
             console.log($p, $p.attr("id"), links.length, links); // Log info about the post
           });
+          function sortInlineDivsByTimestamp() {
+    // Get all articles and sort by nesting depth (deepest first)
+    let allArticles = $('article').get();
+
+    allArticles.sort(function(a, b) {
+        let depthA = $(a).parents('article').length;
+        let depthB = $(b).parents('article').length;
+        return depthB - depthA; // Deepest first
+    });
+
+    // Now process from deepest to shallowest
+    allArticles.forEach(function(article) {
+        let $postWrapper = $(article).children('.post_wrapper');
+        let $inlineDivs = $postWrapper.children('.inline');
+
+        if ($inlineDivs.length > 1) {
+            let inlineDivsArray = $inlineDivs.get();
+
+            inlineDivsArray.sort(function(a, b) {
+                let timeA = new Date($(a).children('article').first().find('time').first().attr('datetime'));
+                let timeB = new Date($(b).children('article').first().find('time').first().attr('datetime'));
+                return timeA - timeB;
+            });
+
+            inlineDivsArray.forEach(div => {
+                $postWrapper.append(div);
+            });
+        }
+    });
+}
+sortInlineDivsByTimestamp()
         }
         $.each(posts, function (index, p) {
           let $p = $(p); // Convert p to a jQuery object
