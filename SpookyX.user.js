@@ -75,6 +75,24 @@
           type: "checkbox",
           value: true,
         },
+         textFontSize: {
+                  name: "Font aize",
+                  description: "Posts font size",
+                  type: "number",
+                  value: 1,
+                },
+        globalFontSize: {
+                  name: "Global Font aize",
+                  description: "Font size",
+                  type: "number",
+                  value: 1,
+                },
+         imageBoxWidth: {
+                  name: "Image box width",
+                  description: "Image box width",
+                  type: "number",
+                  value: 50,
+                },
         inlineImages: {
           name: "Inline Images",
           description:
@@ -3119,6 +3137,57 @@
       $postControls.append($input);
     }
     var updS = () => {};
+    // Create/update style elements for different font size controls
+function updateTextFontSize(size) {
+  let styleEl = document.getElementById('custom-text-font-size');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-text-font-size';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    body .text, div > div.text, pre, .greentext {
+      font-size: ${size}rem !important;
+    }
+  `;
+}
+
+function updateGlobalFontSize(size) {
+  let styleEl = document.getElementById('custom-global-font-size');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-global-font-size';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    body .post_backlink, body, div div.backlinks > a, div div.backlinks {
+      font-size: ${size}em !important;
+    }
+    body .backlink_list, .post_controls a, .post_file, ul.nav.pull-right > form > li > input, .post_data {
+      font-size: ${size}rem !important;
+    }
+    pre, code {
+      font-size: ${size}rem !important;
+    }
+  `;
+}
+function updateImageSize(width) {
+  let styleEl = document.getElementById('custom-image-size');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-image-size';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    .thread_image_box img.smallImage, .thread_image_box video:not(.fullVideo) {
+      max-width: ${width}px !important;
+    }
+    .thread_image_box img.bigImage, .thread_image_box video.fullVideo {
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+  `;
+}
 
    const expandAllQuotes = async (
       postElement,
@@ -3236,8 +3305,10 @@ const scrollHandler = () => {
               const replyChain = postGraph.getReplyChainFromPost(p, includeOP, around);
               replies.push(...replyChain);
           }
+        if(replies.length > 0){
           $(postElement).find(".text").css("display", "none");
           await displayReplyChain(replies, $expandedContainer);
+        }
       } catch (error) {
           console.error("Error in graph expansion:", error);
           $expandedContainer.append(
@@ -3617,9 +3688,68 @@ const scrollHandler = () => {
       }, 3000);
     }
 
-    // Add keyboard shortcut to toggle auto-expansion
-    document.addEventListener("keydown", function (e) {
-      // Ctrl+Shift+E to toggle auto-expansion
+document.addEventListener("keydown", function (e) {
+  // Skip if typing in input fields
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    return;
+  }
+
+  // TEXT ONLY FONT SIZE: - and = (no modifiers)
+  if (e.key === "-" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    settings.UserSettings.textFontSize.value -= 0.1;
+    settings.UserSettings.textFontSize.value = Math.max(0.5, settings.UserSettings.textFontSize.value);
+    updateTextFontSize(settings.UserSettings.textFontSize.value);
+    console.log("Text font size:", settings.UserSettings.textFontSize.value.toFixed(1) + "rem");
+    saveSettings();
+  }
+
+  if ((e.key === "=" || e.key === "+") && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    settings.UserSettings.textFontSize.value += 0.1;
+    settings.UserSettings.textFontSize.value = Math.min(5.0, settings.UserSettings.textFontSize.value);
+    updateTextFontSize(settings.UserSettings.textFontSize.value);
+    console.log("Text font size:", settings.UserSettings.textFontSize.value.toFixed(1) + "rem");
+    saveSettings();
+  }
+
+  // GLOBAL FONT SIZE: Ctrl + - and Ctrl + =
+  if (e.key === ",") {
+    e.preventDefault();
+    settings.UserSettings.globalFontSize.value -= 0.05;
+    settings.UserSettings.globalFontSize.value = Math.max(0.5, settings.UserSettings.globalFontSize.value);
+    updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
+    console.log("Global font size:", settings.UserSettings.globalFontSize.value.toFixed(2) + "rem");
+    saveSettings();
+  }
+
+  if ((e.key === ".")) {
+    e.preventDefault();
+    settings.UserSettings.globalFontSize.value += 0.05;
+    settings.UserSettings.globalFontSize.value = Math.min(3.0, settings.UserSettings.globalFontSize.value);
+    updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
+    console.log("Global font size:", settings.UserSettings.globalFontSize.value.toFixed(2) + "rem");
+    saveSettings();
+  }
+
+  // IMAGE/VIDEO BOX SIZE: Shift + - and Shift + =
+  if (e.key === "_" && e.shiftKey && !e.ctrlKey) { // Shift + - produces "_"
+    e.preventDefault();
+    settings.UserSettings.imageBoxWidth.value -= 25;
+    settings.UserSettings.imageBoxWidth.value = Math.max(50, settings.UserSettings.imageBoxWidth.value);
+    updateImageSize(settings.UserSettings.imageBoxWidth.value);
+    console.log("Image box width:", settings.UserSettings.imageBoxWidth.value + "px");
+    saveSettings();
+  }
+
+  if (e.key === "+" && e.shiftKey && !e.ctrlKey) { // Shift + = produces "+"
+    e.preventDefault();
+    settings.UserSettings.imageBoxWidth.value += 25;
+    settings.UserSettings.imageBoxWidth.value = Math.min(1000, settings.UserSettings.imageBoxWidth.value);
+    updateImageSize(settings.UserSettings.imageBoxWidth.value);
+    console.log("Image box width:", settings.UserSettings.imageBoxWidth.value + "px");
+    saveSettings();
+  }
       if (e.shiftKey && e.key === "A") {
         e.preventDefault();
         toggleAutoExpand();
@@ -8033,7 +8163,6 @@ const scrollHandler = () => {
               adjustments.blue = -50;
               ret = true;
             }
-
             $etarget.css("color", adjustColor(currentColor, adjustments));
             if (ret) return;
 
@@ -9101,6 +9230,17 @@ sortInlineDivsByTimestamp()
         // Call the async function to start processing posts
         processPosts();
       }
+
+// Set initial sizes
+updateTextFontSize(settings.UserSettings.textFontSize.value);
+updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
+updateImageSize(settings.UserSettings.imageBoxWidth.value);
+if(!document.URL.includes('b4k')){
+  $.each($('.smallImage'), function(i, img){
+    img.click()
+    img.click()
+  })
+}
     });
   }
   // Start the wait process immediately
