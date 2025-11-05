@@ -3372,35 +3372,19 @@ const scrollHandler = () => {
           const $levelHeader =
             $(`<div class="level-${level}" style="margin: 5px 0 2px 0; font-size: 12px; font-weight: bold; color: ${
               isOP ? "#773311" : "#555"
-            };">
-                      ${isOP ? "OP" : `L${level}`} (${replyCount}↓${
-              parentList.length
-            }↑)
-                      ${
-                        parentList.length > 0
-                          ? ` ← [${parentList.join(", ")}]`
-                          : ""
-                      }
-                      ${
-                        parentCount !== parentList.length
-                          ? ` (graph: ${parentCount} parents)`
-                          : ""
-                      }
-                  </div>`);
+            };"></div>`);
 
           $container.append($levelHeader);
-
-          // Create post container with level-based indentation
-          const $postContainer = $('<div class="chain-post"></div>');
-          $postContainer.css({
-            margin: "1px 0 2px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
-            "border-left":
-              level > 0 && !isOP ? `${Math.min(level, 4)}px solid #ccc` : "none",
-            "padding-left": level > 0 && !isOP ? "3px" : "0",
-            border: "1px solid #000",
-            background: isOP ? "#fff8f0" : level > 3 ? "#f0f0f0" : "#fafafa",
-            "font-size": "13px",
-          });
+// Create post container with level-based indentation
+const $postContainer = $('<div class="chain-post"></div>');
+$postContainer.css({
+  margin: "1px 0 2px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
+  "border-left": level > 0 && !isOP ? `${Math.min(level, 4)}px solid hsl(${level * 20}, ${Math.max(40, 95-level*4)}%, ${Math.max(70, 100-level*2)}%)` : "none",
+  "padding-left": level > 0 && !isOP ? "8px" : "0",
+  "border-right": "1px solid #d9d9d9",
+  "border-top": "1px solid #d9d9d9",
+  "border-bottom": "1px solid #d9d9d9",
+});
 
           // Add hide/unhide button
           const $toggleBtn = $(
