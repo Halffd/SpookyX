@@ -3137,7 +3137,7 @@
               $link.css({ backgroundColor: "#447744" });
             });
             if (replies.length > 0) {
-              expandAllQuotes(post, false, false, false, replies);
+              expandAllQuotes(post, false, true, false, replies);
             }
           }
         }
@@ -3192,11 +3192,21 @@ function updateImageSize(width) {
   }
   styleEl.textContent = `
     .thread_image_box img.smallImage, .thread_image_box video:not(.fullVideo) {
-      max-width: ${width}px !important;
+      width: ${width}px !important;
+      height: auto !important;
+      max-width: fit-content;
+      max-height: 100% !important;
+    }
+    .thread_image_box img, .thread_image_box video {
+      width: ${width}px !important;
+      height: auto !important;
+      max-height: 100% !important;
+      max-width: fit-content;
     }
     .thread_image_box img.bigImage, .thread_image_box video.fullVideo {
-      max-width: 100% !important;
       width: 100% !important;
+      max-width: fit-content;
+      max-height: 100% !important;
     }
   `;
 }
@@ -3291,7 +3301,7 @@ const scrollHandler = () => {
           $expandedContainer.css({
               "display": isHidden ? "block" : "none",
           });
-        $(postElement).find("..text, .backlinks, header, .post_data, .thread_image_box").css("display", "block");
+          $(postElement).find(".text, .backlinks, header, .post_data, .thread_image_box").css("display", "block");
           $(postElement)
               .find(".expand-all-btn")
               .removeClass("disabled");
@@ -3300,6 +3310,10 @@ const scrollHandler = () => {
               $(window).on('scroll', scrollHandler);
           } else {
               $(window).off('scroll', scrollHandler);
+          }
+
+          if(!isHidden){
+            $expandedContainer.remove()
           }
       });
 
@@ -3379,8 +3393,8 @@ const scrollHandler = () => {
 const $postContainer = $('<div class="chain-post"></div>');
 $postContainer.css({
   margin: "1px 0 2px " + (isOP ? 0 : Math.min(level * 15, 60)) + "px",
-  "border-left": level > 0 && !isOP ? `${Math.min(level, 4)}px solid hsl(${level * 20}, ${Math.max(40, 95-level*4)}%, ${Math.max(70, 100-level*2)}%)` : "none",
-  "padding-left": level > 0 && !isOP ? "8px" : "0",
+  "border-left": level > 0 && !isOP ? `${Math.min(level*2, 8)}px solid hsl(${level * 20}, ${Math.max(40, 95-level*4)}%, ${Math.max(70, 100-level*2)}%)` : "none",
+  "padding-left": level > 0 && !isOP ? "3px" : "0",
   "border-right": "1px solid #d9d9d9",
   "border-top": "1px solid #d9d9d9",
   "border-bottom": "1px solid #d9d9d9",
@@ -9228,7 +9242,7 @@ sortInlineDivsByTimestamp()
                 // Auto-expand if enabled and this is first page load
                 if (settings.UserSettings.autoExpand.value) {
                   await delay(wait / 2);
-                  await expandAllQuotes(posts[i]);
+                  await expandAllQuotes(posts[i], true);
                 }
                 await delay(wait); // Delay between each request to avoid too many requests
               }
