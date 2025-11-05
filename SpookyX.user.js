@@ -3208,6 +3208,13 @@ function updateImageSize(width) {
       max-width: fit-content;
       max-height: 100% !important;
     }
+    .OP-button, .pbutton, .post-id-input, .btnr {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        margin: 5px;
+    }
   `;
 }
 
@@ -3253,7 +3260,7 @@ function updateImageSize(width) {
       // Add header
       const $header = $('<div class="expanded-posts-header"></div>');
       $header.html(
-          `<h3 style="margin: 0; display: inline;">Reply Chain Expansion</h3>`
+          `<h3 style="margin: 0; display: inline;"></h3>`
       );
   const $closeButton = $('<button class="close-expanded-posts">×</button>');
   $closeButton.css({
@@ -3452,7 +3459,7 @@ $postContainer.css({
         }
       }
 
-      $status.text(`Complete: ${processed} posts`);
+      $status.text(`${processed}P`);
     }
     function getContinentColor(country) {
       const continentMap = {
@@ -3602,6 +3609,7 @@ $postContainer.css({
 
       // Find the correct anchor element
       let aElem = $p.find('.post_data a[data-function="highlight"]').first();
+      $p.find('span.post_controls > a:nth-child(2)').remove()
       if (aElem.length === 0) {
         aElem = rec ? $p.find(".post_data > a") : $p.find(".post_controls > a");
       }
@@ -3811,7 +3819,24 @@ document.addEventListener("keydown", function (e) {
         });
       }
     });
-
+    if (e.shiftKey && e.key === "O") {
+        e.preventDefault();
+        $("article.post").each((i, post) => {
+          setTimeout(() => {
+            expandAllQuotes(post, false);
+          }, i * 1000); // Stagger by 1 second each
+        });
+      }
+    });
+    if (e.shiftKey && e.key === "P") {
+            e.preventDefault();
+            $("article.post").each((i, post) => {
+              setTimeout(() => {
+                expandAllQuotes(post, false, true);
+              }, i * 1000); // Stagger by 1 second each
+            });
+          }
+        });
     // Add global expand all button to page
     function addGlobalControls() {
       const $controls = $(
@@ -9264,6 +9289,7 @@ sortInlineDivsByTimestamp()
 // Set initial sizes
 updateTextFontSize(settings.UserSettings.textFontSize.value);
 updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
+
 updateImageSize(settings.UserSettings.imageBoxWidth.value);
 if(!document.URL.includes('b4k')){
   setTimeut(()=>{
