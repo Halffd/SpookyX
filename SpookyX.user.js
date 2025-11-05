@@ -1095,53 +1095,65 @@
         this.log(`📦 Collecting posts for ${startPostId} in ${mode} mode`);
 
         if (mode === "around") {
-          // AROUND MODE: Tight focus, minimal OP replies
-          relevant.add(startPostId);
+          // FULL MODE: Follow conversation thread with OP safety
+          const queue = [startPostId];
+          let maxPosts = 300000; // Reduced limit
+          let collected = 0;
 
-          const startNode = this.postGraph.nodes.get(startPostId);
-          if (startNode) {
-            // Add OP but be VERY careful with its replies
-            const opId = this.postGraph.findOP(startPostId);
-            if (opId) {
+          while (queue.length > 0 && collected < maxPosts) {
+            const currentId = queue.shift();
+            if (visited.has(currentId)) continue;
+
+            visited.add(currentId);
+            relevant.add(currentId);
+            collected++;
+
+            const node = this.postGraph.nodes.get(currentId);
+            if (!node) continue;
+
+            // Add OP but with EXTREME caution
+            const opId = this.postGraph.findOP(currentId);
+            if (opId && !relevant.has(opId) && collected < maxPosts) {
               relevant.add(opId);
+              collected++;
 
-              // CRITICAL: Only add OP replies that are in our conversation chain
-              const opNode = this.postGraph.nodes.get(opId);
-              if (opNode && opId !== startPostId) {
-                // Only add OP replies that lead to our starting post
-                const pathToStart = this.getPathFromOpToPost(opId, startPostId);
-                pathToStart.forEach((postId) => relevant.add(postId));
+              // CRITICAL: DO NOT add OP replies in full mode unless they're direct ancestors
+              // Only add the path from OP to our conversation
+              if (currentId !== opId) {
+                const pathFromOp = this.getPathFromOpToPost(opId, currentId);
+                pathFromOp.forEach((pathPostId) => {
+                  if (!relevant.has(pathPostId) && collected < maxPosts) {
+                    relevant.add(pathPostId);
+                    collected++;
+                  }
+                });
               }
             }
 
-            // Add what this post quotes (parents)
-            /*if(startNode !== startPostId){
-                          const commentText = startNode.data?.comment || startNode.data?.com || "";
-                          const quotedParents = extractParentIds(commentText || "");
-                          quotedParents.forEach(pid => {
-                              if (this.postGraph.nodes.has(pid)) {
-                                  relevant.add(pid);
-                              }
-                          });
-                      }*/
-
-            // Add direct replies to this post (limited)
-            Array.from(startNode.replies).forEach((replyId) => {
-              relevant.add(replyId);
-            });
-
-            // Add replies to quoted posts (but NOT if they're OP)
+            // Add quoted posts (backward links)
+            /*const commentText = node.data?.comment || node.data?.com || "";
+            const quotedParents = extractParentIds(commentText || "");
             quotedParents.forEach((pid) => {
-              if (pid !== opId) {
-                // Skip OP replies here
-                const parentNode = this.postGraph.nodes.get(pid);
-                if (parentNode) {
-                  Array.from(parentNode.replies).forEach((replyId) => {
-                    relevant.add(replyId);
-                  });
-                }
+              if (
+                this.postGraph.nodes.has(pid) &&
+                !visited.has(pid) &&
+                collected < maxPosts
+              ) {
+                queue.push(pid);
               }
-            });
+            });*/
+
+            // Add replies - but SKIP if current post is OP
+            if (currentId !== opId || startPostId === opId) {
+              Array.from(node.replies).forEach((replyId) => {
+                if (!visited.has(replyId) && collected < maxPosts) {
+                  queue.push(replyId);
+                }
+              });
+            } else {
+              // If this IS the OP, only add replies that are directly quoted by posts in our set
+              this.log(`⚠️ At OP ${opId} - skipping bulk reply addition`);
+            }
           }
         } else {
           // FULL MODE: Follow conversation thread with OP safety
@@ -3279,7 +3291,7 @@ const scrollHandler = () => {
           $expandedContainer.css({
               "display": isHidden ? "block" : "none",
           });
-        $(postElement).find(".text").css("display", "block");
+        $(postElement).find("..text, .backlinks, header, .post_data, .thread_image_box").css("display", "block");
           $(postElement)
               .find(".expand-all-btn")
               .removeClass("disabled");
@@ -3306,7 +3318,7 @@ const scrollHandler = () => {
               replies.push(...replyChain);
           }
         if(replies.length > 0){
-          $(postElement).find(".text").css("display", "none");
+          $(postElement).find(".text, .backlinks, header, .post_data, .thread_image_box").css("display", "none");
           await displayReplyChain(replies, $expandedContainer);
         }
       } catch (error) {
@@ -3772,6 +3784,26 @@ document.addEventListener("keydown", function (e) {
 });
       }
       // shift also expands all posts on page
+      if (e.shiftKey && e.key === "I") {
+        e.preventDefault();
+        $.each($('.thread_image_box img'), function(i, img){
+    img.click()
+  })
+
+        $.each($('.thread_image_box video'), function(i, img){
+    img.hover();
+          img.click()
+  })
+      }
+
+    if (e.shiftKey && e.key === "R") {
+        e.preventDefault();
+        $("article.post").each((i, post) => {
+          setTimeout(() => {
+            expandAllQuotes(post, true, true, false);
+          }, i * 1000); // Stagger by 1 second each
+        });
+      }
       if (e.shiftKey && e.key === "E") {
         e.preventDefault();
         $("article.post").each((i, post) => {
@@ -9236,10 +9268,17 @@ updateTextFontSize(settings.UserSettings.textFontSize.value);
 updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
 updateImageSize(settings.UserSettings.imageBoxWidth.value);
 if(!document.URL.includes('b4k')){
-  $.each($('.smallImage'), function(i, img){
+  setTimeut(()=>{
+    $.each($('.thread_image_box img'), function(i, img){
     img.click()
-    img.click()
+    //img.click()
   })
+    setTimeut(()=>{
+      $.each($('.thread_image_box video'), function(i, img){
+      img.click()
+      //img.click()
+    })}, 5000);
+  }, 3000);
 }
     });
   }
