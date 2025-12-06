@@ -37,14 +37,12 @@
   // @include       http://archived.moe/*
   // @include       https://archived.moe/*
   // @require https://code.jquery.com/jquery-3.6.0.min.js
-  // @require       https://cdn.rawgit.com/madapaja/jquery.selection/master/src/jquery.selection.js
-  // @require       https://raw.githubusercontent.com/jquery/jquery-mousewheel/master/jquery.mousewheel.min.js
-  // @require       https://raw.githubusercontent.com/carloscabo/colz/master/public/js/colz.class.min.js
   // @grant GM_xmlhttpRequest
   // @grant unsafeWindow
   // @grant none
   // @icon          https://i.imgur.com/LaYyYRl.png
   // ==/UserScript==
+
   if (jQuery && !jQuery.fn.error) {
     jQuery.fn.error = function (handler) {
       return this.on("error", handler);
@@ -3191,21 +3189,21 @@ function updateImageSize(width) {
     document.head.appendChild(styleEl);
   }
   styleEl.textContent = `
-    .thread_image_box img.smallImage, .thread_image_box video:not(.fullVideo) {
+    .<thread_image_box img.smallImage, .thread_image_box video:not(.fullVideo) {
       width: ${width}px !important;
       height: auto !important;
-      max-width: fit-content;
+      max-width: 1500px !importanr;
       max-height: 100% !important;
     }
     .thread_image_box img, .thread_image_box video {
       width: ${width}px !important;
       height: auto !important;
       max-height: 100% !important;
-      max-width: fit-content;
+      max-width: 1500px !importanr;;
     }
     .thread_image_box img.bigImage, .thread_image_box video.fullVideo {
       width: 100% !important;
-      max-width: fit-content;
+    max-width:  1500px !importanr;
       max-height: 100% !important;
     }
     .OP-button, .pbutton, .post-id-input, .btnr {
@@ -3716,7 +3714,7 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "-" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault();
     settings.UserSettings.textFontSize.value -= 0.1;
-    settings.UserSettings.textFontSize.value = Math.max(0.5, settings.UserSettings.textFontSize.value);
+    settings.UserSettings.textFontSize.value = Math.max(0.1, settings.UserSettings.textFontSize.value);
     updateTextFontSize(settings.UserSettings.textFontSize.value);
     console.log("Text font size:", settings.UserSettings.textFontSize.value.toFixed(1) + "rem");
     saveSettings();
@@ -3725,7 +3723,7 @@ document.addEventListener("keydown", function (e) {
   if ((e.key === "=" || e.key === "+") && !e.shiftKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault();
     settings.UserSettings.textFontSize.value += 0.1;
-    settings.UserSettings.textFontSize.value = Math.min(5.0, settings.UserSettings.textFontSize.value);
+    settings.UserSettings.textFontSize.value = Math.min(75.0, settings.UserSettings.textFontSize.value);
     updateTextFontSize(settings.UserSettings.textFontSize.value);
     console.log("Text font size:", settings.UserSettings.textFontSize.value.toFixed(1) + "rem");
     saveSettings();
@@ -3735,7 +3733,7 @@ document.addEventListener("keydown", function (e) {
   if (e.key === ",") {
     e.preventDefault();
     settings.UserSettings.globalFontSize.value -= 0.05;
-    settings.UserSettings.globalFontSize.value = Math.max(0.5, settings.UserSettings.globalFontSize.value);
+    settings.UserSettings.globalFontSize.value = Math.max(0.1, settings.UserSettings.globalFontSize.value);
     updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
     console.log("Global font size:", settings.UserSettings.globalFontSize.value.toFixed(2) + "rem");
     saveSettings();
@@ -3744,7 +3742,7 @@ document.addEventListener("keydown", function (e) {
   if ((e.key === ".")) {
     e.preventDefault();
     settings.UserSettings.globalFontSize.value += 0.05;
-    settings.UserSettings.globalFontSize.value = Math.min(3.0, settings.UserSettings.globalFontSize.value);
+    settings.UserSettings.globalFontSize.value = Math.min(75.0, settings.UserSettings.globalFontSize.value);
     updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
     console.log("Global font size:", settings.UserSettings.globalFontSize.value.toFixed(2) + "rem");
     saveSettings();
@@ -3754,7 +3752,7 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "_" && e.shiftKey && !e.ctrlKey) { // Shift + - produces "_"
     e.preventDefault();
     settings.UserSettings.imageBoxWidth.value -= 25;
-    settings.UserSettings.imageBoxWidth.value = Math.max(50, settings.UserSettings.imageBoxWidth.value);
+    settings.UserSettings.imageBoxWidth.value = Math.max(5, settings.UserSettings.imageBoxWidth.value);
     updateImageSize(settings.UserSettings.imageBoxWidth.value);
     console.log("Image box width:", settings.UserSettings.imageBoxWidth.value + "px");
     saveSettings();
@@ -3763,7 +3761,7 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "+" && e.shiftKey && !e.ctrlKey) { // Shift + = produces "+"
     e.preventDefault();
     settings.UserSettings.imageBoxWidth.value += 25;
-    settings.UserSettings.imageBoxWidth.value = Math.min(1000, settings.UserSettings.imageBoxWidth.value);
+    settings.UserSettings.imageBoxWidth.value = Math.min(10000, settings.UserSettings.imageBoxWidth.value);
     updateImageSize(settings.UserSettings.imageBoxWidth.value);
     console.log("Image box width:", settings.UserSettings.imageBoxWidth.value + "px");
     saveSettings();
@@ -3801,6 +3799,14 @@ document.addEventListener("keydown", function (e) {
           img.click()
   })
       }
+    if (e.shiftKey && e.key === "M") {
+        let u=document.URL
+        let i=document.URL.search(/\.\w+\/\w+/)
+        let sl = u.slice(i)
+        let p=sl.replace(/\.\w+/, '')
+        let res = 'https://www.archived.moe' + p
+        window.location = res
+    }
 
     if (e.shiftKey && e.key === "R") {
         e.preventDefault();
@@ -3818,7 +3824,7 @@ document.addEventListener("keydown", function (e) {
           }, i * 1000); // Stagger by 1 second each
         });
       }
-    });
+
     if (e.shiftKey && e.key === "O") {
         e.preventDefault();
         $("article.post").each((i, post) => {
@@ -3827,7 +3833,6 @@ document.addEventListener("keydown", function (e) {
           }, i * 1000); // Stagger by 1 second each
         });
       }
-    });
     if (e.shiftKey && e.key === "P") {
             e.preventDefault();
             $("article.post").each((i, post) => {
@@ -3836,7 +3841,7 @@ document.addEventListener("keydown", function (e) {
               }, i * 1000); // Stagger by 1 second each
             });
           }
-        });
+    });
     // Add global expand all button to page
     function addGlobalControls() {
       const $controls = $(
@@ -8210,7 +8215,7 @@ document.addEventListener("keydown", function (e) {
 
             let isTop = postID == article?.id;
             let isOp = postID == op[0];
-            let isFocused = focused.id == closestPost.id;
+            let isFocused = focused?.id == closestPost.id;
             if (called && isFocused) {
               adjustments.red = 44;
             }
@@ -8929,11 +8934,13 @@ document.addEventListener("keydown", function (e) {
         let pLast = pUrl[pUrl.length - 1];
 
         // Check if the post starts with '#'
+        try{
         if (pLast.charAt(0) === "#") {
           let post = `#${pLast.substring(1)}`; // Construct the ID selector
           focused = $(post)[0];
           focused.scrollIntoView({ behavior: "smooth", block: "start" });
         }
+        }catch{}
         // Function to handle clicks
         function handleClicks(aElems) {
           let queue = [...aElems]; // Start with the initial elements
