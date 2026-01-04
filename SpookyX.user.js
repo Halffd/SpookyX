@@ -9298,7 +9298,7 @@ updateTextFontSize(settings.UserSettings.textFontSize.value);
 updateGlobalFontSize(settings.UserSettings.globalFontSize.value);
 
 updateImageSize(settings.UserSettings.imageBoxWidth.value);
-if(!document.URL.includes('b4k')){
+/*if(!document.URL.includes('b4k')){
   setTimeut(()=>{
     $.each($('.thread_image_box img'), function(i, img){
     img.click()
@@ -9310,7 +9310,7 @@ if(!document.URL.includes('b4k')){
       //img.click()
     })}, 5000);
   }, 3000);
-}
+}*/
     });
   }
   // Start the wait process immediately
