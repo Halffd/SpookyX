@@ -884,13 +884,123 @@
     var focused = { id: null };
     const inverse = !true;
     const url = document.URL;
+    const maxMin = 20 * 60
+    function jitters(mx = maxMin, mi = 50) {
+      // Convert to milliseconds
+      const minMs = mi * 1000;
+      const maxMs = mx * 1000;
+
+      // Random between minMs and maxMs (inclusive)
+      return Math.random() * (maxMs - minMs) + minMs
+    }
+    var dltm = null
     var wait = url.split("/")[2].includes("4plebs") ||
       url.split("/")[2].includes("archived.moe")
-        ? 45000
-        : 25000;
+        ? 95000
+        : 45000;
     if (url.split("/")[2].includes("b4k")) {
-      wait = 75000;
+      wait = 85000;
     }
+    var baseWait = wait
+    wait += jitters()
+    console.log(wait, baseWait, 'ms')
+
+// ============================================================
+// 1. CACHED VIEWPORT DIMENSIONS (avoid layout thrashing)
+// ============================================================
+let vw = innerWidth;
+let vh = innerHeight;
+
+addEventListener('resize', () => {
+    vw = innerWidth;
+    vh = innerHeight;
+}, { passive: true });
+
+// ============================================================
+// 2. TRACK MOUSE (minimal, no object allocation)
+// ============================================================
+let mx = 0;
+let my = 0;
+
+addEventListener('mousemove', (e) => {
+    mx = e.clientX;
+    my = e.clientY;
+}, { passive: true });
+
+// ============================================================
+// 3. CORE: Get element at cursor (with corner fallback)
+// ============================================================
+function getElementAtCursor() {
+    let x = mx;
+    let y = my;
+
+    // 10% corner check — inlined (no function call overhead)
+    const t = vw * 0.1;                  // 10% of width
+    const tY = vh * 0.1;                 // 10% of height
+    const inCorner = (x < t || x > vw - t) && (y < tY || y > vh - tY);
+
+    if (inCorner) {
+        x = vw >> 1;  // faster than /2 (bit shift)
+        y = vh >> 1;
+    }
+
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+
+    // Return minimal object — avoid extra lookups
+    return {
+        el,
+        parent: el.parentElement,
+        x,
+        y,
+        tag: el.tagName,
+        id: el.id || '',
+        cls: el.className || ''
+    };
+}
+
+// ============================================================
+// 4. Get element at view center (optimized)
+// ============================================================
+function getElementAtCenter() {
+    const x = vw >> 1;
+    const y = vh >> 1;
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    return { el, parent: el.parentElement, x, y, tag: el.tagName, id: el.id || '', cls: el.className || '' };
+}
+
+// ============================================================
+// 5. Get both (cursor + center) — reuses functions
+// ============================================================
+function getBoth() {
+    const c = getElementAtCursor();
+    const ctr = getElementAtCenter();
+    return { cursor: c, center: ctr, same: c?.el === ctr?.el };
+}
+
+    let delayPromise = null;
+let cancelDelay = false;
+
+function delay(ms) {
+    return new Promise(resolve => {
+        cancelDelay = false;
+        const timer = setTimeout(() => {
+            if (!cancelDelay) resolve();
+        }, ms);
+
+        // Store cleanup function
+        delayPromise = {
+            resolve,
+            timer,
+            cancel: () => {
+                cancelDelay = true;
+                clearTimeout(timer);
+                resolve(); // Resolve early
+            }
+        };
+    });
+}
     class Reply {
       constructor(postId, data, level = 0) {
         this.id = postId;
@@ -1838,10 +1948,6 @@
 
       return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
     }
-    // Function to wait for a specified time
-    const delay = (ms) => {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    };
     function createPostElement(data) {
       const postElement = document.createElement("article");
       postElement.classList.add("post", "expanded-post");
@@ -2457,12 +2563,37 @@
     var ops = [];
     var opsId = [];
     var postsObj = {};
+let cachedThread = null;
 
-    // Get the main thread
-    const getMainThread = () => {
-      const threadElement = document.querySelector("#main .thread");
-      return [threadElement.id, threadElement];
-    };
+const getMainThread = () => {
+    if (cachedThread) return cachedThread;
+
+    let threadElement = null; //document.querySelector("#main .thread");
+
+    if (!threadElement) {
+        threadElement = document.createElement('div');
+        threadElement.className = 'thread';
+        threadElement.id = 'thread';
+
+        const img = document.querySelector("article > .thread_image_box");
+        if (img) {
+            // ✅ Clone siblings instead of moving them
+            const header = img.nextElementSibling;
+            const links = header?.nextElementSibling;
+            const text = links?.nextElementSibling;
+            threadElement.append(img.cloneNode(true));
+            if (header) threadElement.append(header.cloneNode(true));
+            if (links) threadElement.append(links.cloneNode(true));
+            if (text) threadElement.append(text.cloneNode(true));
+        }
+
+        const main = document.querySelector('#main');
+        if (main) main.appendChild(threadElement);
+    }
+
+    cachedThread = [threadElement.id, threadElement];
+    return cachedThread;
+};
     const getOp = getMainThread;
 
     // Get all post wrappers
@@ -3585,6 +3716,14 @@ $postContainer.css({
         // Add more fields as needed
       };
     }
+    setTimeout(()=>{
+      let pts = document.querySelectorAll("article.post");
+
+      // Sequentially process each post with a delay
+      for (let elp of pts) {
+        processCountry($(elp));
+      }
+      }, 500)
 
     const processPost = async (post) => {
       if (!post) {
@@ -3603,6 +3742,10 @@ $postContainer.css({
         console.error("Post has no ID:", post);
         return;
       }
+      if(post?.getAttribute('visited') === 'true'){
+        return;
+      }
+      post.setAttribute('visited', 'true');
 
       let $p = $(post);
 
@@ -3813,17 +3956,56 @@ document.addEventListener("keydown", function (e) {
         e.preventDefault();
         $("article.post").each((i, post) => {
           setTimeout(() => {
-            expandAllQuotes(post, true, true, false);
+            expandAllQuotes(post, true, true);
           }, i * 1000); // Stagger by 1 second each
         });
       }
-    if(e.key == "F"){
-      wait = 500
+    if(e.key == "F" || e.key == "F"){
+      wait = jitters(1.5, 0.5)
+         if (delayPromise && delayPromise.cancel) {
+            delayPromise.cancel();
+            console.log('Delay cancelled');
+        }
     }
+  if(e.key == "b" || e.key == "B"){
+    let elc = e.altKey ? getElementAtCenter() : getElementAtCursor()
+    let el = elc.el.closest('.post');
+    processPost(el).then(()=>{
+      new Promise(r => setTimeout(r, jitters(0.5, 0.2))).then(()=>{
+        if(e.shiftKey){
+          expandAllQuotes(el, true, false, true);
+        } else {
+          el.querySelector(".OP-button").click()
+        }
+      })
+    })
+  }
+  if(e.key == "n" || e.key == "N"){
+    let elc = e.altKey ? getElementAtCenter() : getElementAtCursor()
+    let el = elc.el.closest('.post');
+    processPost(el).then(()=>{
+      new Promise(r => setTimeout(r, jitters(0.5, 0.2))).then(()=>{
+        expandAllQuotes(el, e.shiftKey ? true : false, true);
+      })
+    })
+  }
+  if(e.key == "M" || e.key == "m"){
+    let elc = e.altKey ? getElementAtCenter() : getElementAtCursor(e)
+    let el = elc.el.closest('.post');
+    processPost(el).then(()=>{
+      new Promise(r => setTimeout(r, jitters(0.5, 0.2))).then(()=>{
+        expandAllQuotes(el, e.shiftKey ? true : false, false);
+      })
+    })
+  }
     if (e.shiftKey && e.key === "U") {
         e.preventDefault();
         $("article.post").each((i, post) => {
+          processPost(post).then(()=>{
+      new Promise(r => setTimeout(r, jitters(0.2, 0.1))).then(()=>{
           post.querySelector(".OP-button").click()
+      })
+    })
         });
       }
       if (e.shiftKey && e.key === "E") {
@@ -9094,12 +9276,12 @@ sortInlineDivsByTimestamp()
                     console.log("Search page - using DFS to find OP");
 
                     const currentPostId = $this
-                      .closest("article.post")[0]
+                      .closest(".post")[0]
                       .id.replace(/^r/, "");
 
                     // Ensure post is in graph
                     if (!postGraph.nodes.has(currentPostId)) {
-                      const $post = $this.closest("article.post");
+                      const $post = $this.closest(".post");
                       let board = $post.data("board");
                       if (!board) {
                         const currentUrl = window.location.pathname;
