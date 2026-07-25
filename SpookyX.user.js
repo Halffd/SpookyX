@@ -36,10 +36,12 @@
   // @include       https://arch.b4k.dev/*
   // @include       http://archived.moe/*
   // @include       https://archived.moe/*
-  // @require https://code.jquery.com/jquery-3.6.0.min.js
+
+// @require       https://gist.githubusercontent.com/Quesito24/2af88127bb805b1999dffce0b55893ff/raw/7d21adcba6cf33991cfbbc478ee9d3f148aa3dee/jquery.selection.js
+// @require       https://raw.githubusercontent.com/jquery/jquery-mousewheel/65c0f35fbe4e87dc623e5bf743ccfe1db12ab018/jquery.mousewheel.min.js
+// @require       https://raw.githubusercontent.com/carloscabo/colz/master/public/js/colz.class.min.js
   // @grant GM_xmlhttpRequest
   // @grant unsafeWindow
-  // @grant none
   // @icon          https://i.imgur.com/LaYyYRl.png
   // ==/UserScript==
 
@@ -882,13 +884,12 @@
     var focused = { id: null };
     const inverse = !true;
     const url = document.URL;
-    var wait =
-      url.split("/")[2].includes("4plebs") ||
+    var wait = url.split("/")[2].includes("4plebs") ||
       url.split("/")[2].includes("archived.moe")
-        ? 4000
-        : 150;
+        ? 45000
+        : 25000;
     if (url.split("/")[2].includes("b4k")) {
-      wait = 10000;
+      wait = 75000;
     }
     class Reply {
       constructor(postId, data, level = 0) {
@@ -2459,7 +2460,7 @@
 
     // Get the main thread
     const getMainThread = () => {
-      const threadElement = document.querySelector("#main > article.thread");
+      const threadElement = document.querySelector("#main .thread");
       return [threadElement.id, threadElement];
     };
     const getOp = getMainThread;
@@ -3814,6 +3815,15 @@ document.addEventListener("keydown", function (e) {
           setTimeout(() => {
             expandAllQuotes(post, true, true, false);
           }, i * 1000); // Stagger by 1 second each
+        });
+      }
+    if(e.key == "F"){
+      wait = 500
+    }
+    if (e.shiftKey && e.key === "U") {
+        e.preventDefault();
+        $("article.post").each((i, post) => {
+          post.querySelector(".OP-button").click()
         });
       }
       if (e.shiftKey && e.key === "E") {
