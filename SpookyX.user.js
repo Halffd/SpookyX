@@ -2051,495 +2051,937 @@ function delay(ms) {
 
       return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
     }
-    function createPostElement(data) {
-      const postElement = document.createElement("article");
-      postElement.classList.add("post", "expanded-post");
+// ─── CONFIG ──────────────────────────────────────────────
+const MEDIA_CONFIG = {
+  // 1. Prefer full image first, then fallback to thumb
+  preferFullImage: !(url.split("/")[2].includes("4plebs") ||
+      url.split("/")[2].includes("archived.moe") || url.split("/")[2].includes("b4k")),
 
-      // Add doc_id class if available
-      if (data.doc_id) {
-        postElement.classList.add(`doc_id_${data.doc_id}`);
+  // 2. Video hover autoplay behavior
+  videoHoverAutoplay: true,
+  videoShowControlsOnHover: true, // only show controls near bottom
+
+  // 3. Sequential video loading
+  videoLoadDelayMs: 300,      // delay between each video load
+  videoLoadQueue: [],          // internal queue
+  videoQueueRunning: false,
+
+  // 4. Thumb-first, then load full when in view
+  thumbFirst: true,            // load thumb immediately, full on viewport
+  lazyLoadFullOnView: true,    // swap to full when scrolled into view
+  fullLoadRootMargin: "300px", // pre-load distance
+
+  // 5. Image expand behavior
+  expandToFullOnClick: true,
+};
+
+// ─── VIDEO LOAD QUEUE ────────────────────────────────────
+function enqueueVideoLoad(loadFn) {
+  MEDIA_CONFIG.videoLoadQueue.push(loadFn);
+  if (!MEDIA_CONFIG.videoQueueRunning) {
+    processVideoQueue();
+  }
+}
+
+async function processVideoQueue() {
+  MEDIA_CONFIG.videoQueueRunning = true;
+  while (MEDIA_CONFIG.videoLoadQueue.length > 0) {
+    const fn = MEDIA_CONFIG.videoLoadQueue.shift();
+    try {
+      await fn();
+    } catch (e) {
+      console.warn("Video load error:", e);
+    }
+    await new Promise((r) => setTimeout(r, MEDIA_CONFIG.videoLoadDelayMs));
+  }
+  MEDIA_CONFIG.videoQueueRunning = false;
+}
+
+// ─── SHARED INTERSECTION OBSERVER ────────────────────────
+const mediaViewObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        if (el._onEnterView) el._onEnterView();
+        mediaViewObserver.unobserve(el);
       }
+    });
+  },
+  { rootMargin: MEDIA_CONFIG.fullLoadRootMargin }
+);
 
-      // Add "base" class for main posts (not inline)
-      postElement.classList.add("base");
+// ─── HELPERS ─────────────────────────────────────────────
+function deriveThumb(url) {
+  if (!url) return null;
+  let m = url.match(/^(.*)\/image\/(\d{4})\/(\d{2})\/([^\/]+)\.(\w+)$/);
+  if (m) return `${m[1]}/thumb/${m[2]}/${m[3]}/${m[4]}s.jpg`;
+  m = url.match(/^(.*)\/(\d{4})\/(\d{2})\/([^\/\.]+)\.(\w+)$/);
+  if (m) return `${m[1]}/${m[2]}/${m[3]}/${m[4]}s.jpg`;
+  m = url.match(/^(.*\/)([^\/]+)\.(\w+)$/);
+  if (m) return `${m[1]}${m[2]}s.jpg`;
+  return null;
+}
 
-      postElement.id = "r" + (data.num || data.no || "0");
+function extractHashFromUrl(url) {
+  if (!url) return null;
+  if (url.includes("desuarchive.org")) {
+    const m = url.match(/\/image\/[^\/]+\/[^\/]+\/([^\/\.]+)\./);
+    return m ? m[1] : null;
+  }
+  if (url.includes("arch-img.b4k.dev")) {
+    const m = url.match(/\/media\/([^\/\.]+)\./);
+    return m ? m[1] : null;
+  }
+  if (url.includes("archive-media.palanq.win")) {
+    const m = url.match(/\/image\/\d+\/\d+\/([^\/\.]+)\./);
+    return m ? m[1] : null;
+  }
+  return null;
+}
 
-      let boardName = "unknown";
-      if (data.board) {
-        if (
-          typeof data.board === "object" &&
-          data.board !== null &&
-          data.board.shortname
-        ) {
-          boardName = data.board.shortname;
-        } else if (typeof data.board === "string") {
-          boardName = data.board;
-        }
-      }
+function fmtTime(s) {
+  if (!isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${m}:${sec}`;
+}
 
-      postElement.setAttribute("data-board", boardName);
-      if (data.doc_id) {
-        postElement.setAttribute("data-doc-id", data.doc_id);
-      }
+// ═══════════════════════════════════════════════════════════
+// POST ELEMENT
+// ═══════════════════════════════════════════════════════════
+function createPostElement(data) {
+  const postElement = document.createElement("article");
+  postElement.classList.add("post", "expanded-post");
 
-      if (data.media) {
-        postElement.classList.add("has_image");
-      }
+  if (data.doc_id) {
+    postElement.classList.add(`doc_id_${data.doc_id}`);
+  }
 
-      // Add the pull-left toggle button (like desuarchive)
-      const pullLeft = document.createElement("div");
-      pullLeft.classList.add("pull-left");
-      pullLeft.style.float = "left";
+  postElement.classList.add("base");
+  postElement.id = "r" + (data.num || data.no || "0");
 
-      const toggleButton = document.createElement("button");
-      toggleButton.classList.add("btn-toggle-post");
-      toggleButton.setAttribute("data-function", "hidePost");
-      toggleButton.setAttribute("data-board", boardName);
-      if (data.doc_id) {
-        toggleButton.setAttribute("data-doc-id", data.doc_id);
-      }
-      toggleButton.innerHTML = '<i class="icon-minus"></i>';
+  let boardName = "unknown";
+  if (data.board) {
+    if (
+      typeof data.board === "object" &&
+      data.board !== null &&
+      data.board.shortname
+    ) {
+      boardName = data.board.shortname;
+    } else if (typeof data.board === "string") {
+      boardName = data.board;
+    }
+  }
 
-      pullLeft.appendChild(toggleButton);
-      postElement.appendChild(pullLeft);
+  postElement.setAttribute("data-board", boardName);
+  if (data.doc_id) {
+    postElement.setAttribute("data-doc-id", data.doc_id);
+  }
 
-      // Create post wrapper
-      const postWrapper = document.createElement("div");
-      postWrapper.classList.add("post_wrapper");
+  if (data.media) {
+    postElement.classList.add("has_image");
+  }
 
-      // Add file info if image exists
-      if (data.media && data.media.media_link) {
-        const postFile = document.createElement("div");
-        postFile.classList.add("post_file");
+  // Pull-left toggle button
+  const pullLeft = document.createElement("div");
+  pullLeft.classList.add("pull-left");
+  pullLeft.style.float = "left";
 
-        const filename = data.media.media_filename || data.filename || "image";
-        const filesize = data.fsize
-          ? Math.round(data.fsize / 1024) + "KiB"
-          : "Unknown size";
-        const dimensions =
-          data.media.media_w && data.media.media_h
-            ? `${data.media.media_w}x${data.media.media_h}`
-            : "";
+  const toggleButton = document.createElement("button");
+  toggleButton.classList.add("btn-toggle-post");
+  toggleButton.setAttribute("data-function", "hidePost");
+  toggleButton.setAttribute("data-board", boardName);
+  if (data.doc_id) {
+    toggleButton.setAttribute("data-doc-id", data.doc_id);
+  }
+  toggleButton.innerHTML = '<i class="icon-minus"></i>';
 
-        // Get image URL and hash for searches
-        const imageUrl = data.media.media_link;
-        const encodedImageUrl = encodeURIComponent(imageUrl);
+  pullLeft.appendChild(toggleButton);
+  postElement.appendChild(pullLeft);
 
-        // Extract hash from desuarchive image URLs
-        const extractHashFromDesuUrl = (url) => {
-          // Example: https://desuarchive.org/int/image/1234/56/abcd1234.jpg
-          // or: https://arch-img.b4k.dev/media/hash.jpg
+  const postWrapper = document.createElement("div");
+  postWrapper.classList.add("post_wrapper");
 
-          if (url.includes("desuarchive.org")) {
-            const match = url.match(/\/image\/[^\/]+\/[^\/]+\/([^\/\.]+)\./);
-            return match ? match[1] : null;
-          }
+  // ─── MEDIA (IMAGE / VIDEO) + FILE INFO ──────────────────
+  if (data.media && data.media.media_link) {
+    const postFile = document.createElement("div");
+    postFile.classList.add("post_file");
 
-          if (url.includes("arch-img.b4k.dev")) {
-            const match = url.match(/\/media\/([^\/\.]+)\./);
-            return match ? match[1] : null;
-          }
+    const filename = data.media.media_filename || data.filename || "file";
+    const filesize = data.fsize
+      ? Math.round(data.fsize / 1024) + "KiB"
+      : "Unknown size";
+    const dimensions =
+      data.media.media_w && data.media.media_h
+        ? `${data.media.media_w}x${data.media.media_h}`
+        : "";
 
-          if (url.includes("b4k.co/media")) {
-            const match = url.match(/\/media\/([^\/\.]+)\./);
-            return match ? match[1] : null;
-          }
+    const imageUrl = data.media.media_link;
+    const encodedImageUrl = encodeURIComponent(imageUrl);
 
-          return null;
-        };
+    // ─── DETECT VIDEO ─────────────────────────────────────
+    const isVideo = (() => {
+      const url = imageUrl.toLowerCase();
+      const ext = (data.media.media_ext || data.ext || "").toLowerCase();
+      const type = (data.media.media_type || "").toLowerCase();
+      if (/\.(webm|mp4|m4v|mov|avi|mkv|ogv)(\?|$)/.test(url)) return true;
+      if (["webm", "mp4", "m4v", "mov", "avi", "mkv", "ogv"].includes(ext))
+        return true;
+      if (type.startsWith("video/")) return true;
+      return false;
+    })();
 
-        // Extract image hash from various possible fields
-        const imageHash =
-          data.media.media_hash ||
-          data.media.safe_media_hash ||
-          data.media_hash ||
-          data.safe_media_hash ||
-          data.media.media_id ||
-          extractHashFromDesuUrl(imageUrl) ||
-          null;
+    const getVideoType = () => {
+      const url = imageUrl.toLowerCase();
+      const ext = (data.media.media_ext || data.ext || "").toLowerCase();
+      const type = (data.media.media_type || "").toLowerCase();
 
-        // Get base URL for search
-        const baseUrl = (() => {
-          const currentUrl = document.URL;
-          if (currentUrl.includes("/_/search/")) {
-            const urlParts = currentUrl.split("/");
-            return `${urlParts[0]}//${urlParts[2]}`;
-          }
-          const domain = document.URL.split("/")[2];
-          const protocol = document.URL.split("/")[0];
-          return `${protocol}//${domain}`;
-        })();
+      if (type.startsWith("video/")) return type;
 
-        // Create View Same URL
-        const viewSameUrl = imageHash
-          ? `${baseUrl}/_/search/image/${imageHash}/`
-          : imageUrl; // Fallback to image URL if no hash
-
-        postFile.innerHTML = `
-            <span class="post_file_controls">
-                <a href="${viewSameUrl}" target="_blank" rel="noopener" class="btnr parent" title="Find other posts with this image">View Same</a>
-                <a href="https://lens.google.com/uploadbyurl?url=${encodedImageUrl};text:google" target="_blank" rel="noopener" class="btnr parent">Google</a>
-                <a href="https://imgops.com/${imageUrl}" target="_blank" rel="noopener" class="btnr parent">ImgOps</a>
-                <a href="https://iqdb.org/?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">iqdb</a>
-                <a href="https://saucenao.com/search.php?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">SauceNAO</a>
-                <a href="${imageUrl}" download="${filename}" class="btnr parent">
-                    <i class="icon-download-alt"></i>
-                </a>
-            </span>
-            <a href="${imageUrl}" class="post_file_filename" title="${filename}">${filename}</a>,
-            <span class="post_file_metadata">${filesize}${
-          dimensions ? ", " + dimensions : ""
-        }</span>
-        `;
-
-        postWrapper.appendChild(postFile);
-
-        const imageBox = document.createElement("div");
-        imageBox.classList.add("thread_image_box");
-
-        const imageLink = document.createElement("a");
-        imageLink.href = "#"; // Change from imageUrl to # to prevent navigation
-        imageLink.classList.add("thread_image_link");
-
-        const imageElement = document.createElement("img");
-        imageElement.src = imageUrl;
-        imageElement.classList.add("post_image");
-        imageElement.loading = "lazy";
-
-        // Add dimensions and click-to-expand functionality
-        let isExpanded = false;
-        const originalMaxWidth = data.media.media_w
-          ? Math.min(data.media.media_w, 250)
-          : 250;
-        const originalMaxHeight = data.media.media_h
-          ? Math.min(data.media.media_h, 250)
-          : 250;
-
-        // Set initial size
-        imageElement.style.maxWidth = originalMaxWidth + "px";
-        imageElement.style.maxHeight = originalMaxHeight + "px";
-        imageElement.style.cursor = "pointer";
-        imageElement.style.transition = "all 0.3s ease";
-
-        // Click handler for expand/collapse
-        const toggleImageSize = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          if (isExpanded) {
-            // Collapse to thumbnail
-            imageElement.style.maxWidth = originalMaxWidth + "px";
-            imageElement.style.maxHeight = originalMaxHeight + "px";
-            imageElement.style.width = "auto";
-            imageElement.style.height = "auto";
-            imageElement.style.position = "static";
-            imageElement.style.zIndex = "auto";
-            imageElement.style.boxShadow = "none";
-            imageElement.title = "Click to expand";
-            isExpanded = false;
-          } else {
-            // Expand to full size
-            imageElement.style.maxWidth = "100%";
-            imageElement.style.maxHeight = "100%";
-            imageElement.style.width = "auto";
-            imageElement.style.height = "auto";
-            imageElement.style.position = "relative";
-            imageElement.style.zIndex = "1000";
-            imageElement.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
-            imageElement.title = "Click to collapse";
-            isExpanded = true;
-          }
-        };
-
-        // Add click handlers
-        imageElement.addEventListener("click", toggleImageSize);
-        imageLink.addEventListener("click", toggleImageSize);
-
-        // Add hover effect
-        imageElement.addEventListener("mouseenter", () => {
-          if (!isExpanded) {
-            imageElement.style.opacity = "0.8";
-            imageElement.title = "Click to expand to full size";
-          }
-        });
-
-        imageElement.addEventListener("mouseleave", () => {
-          if (!isExpanded) {
-            imageElement.style.opacity = "1";
-          }
-        });
-
-        imageElement.onerror = function () {
-          console.warn("Image failed to load:", imageUrl);
-
-          // Try alternative URLs if the original fails
-          let newSrc = imageUrl;
-
-          if (imageUrl.includes("arch-img.b4k.dev")) {
-            newSrc = imageUrl.replace("arch-img.b4k.dev", "b4k.co/media");
-          } else if (imageUrl.includes("is2.4chan.org")) {
-            newSrc = imageUrl.replace("is2.4chan.org", "i.4cdn.org");
-          } else if (imageUrl.includes("is.4chan.org")) {
-            newSrc = imageUrl.replace("is.4chan.org", "i.4cdn.org");
-          }
-
-          if (newSrc !== imageUrl) {
-            console.log("Trying alternative image source:", newSrc);
-            this.src = newSrc;
-          } else {
-            this.style.display = "none";
-          }
-        };
-
-        imageLink.appendChild(imageElement);
-        imageBox.appendChild(imageLink);
-        postWrapper.appendChild(imageBox);
-
-        // Debug log for image hash
-        console.log(`Image hash for ${filename}:`, imageHash);
-        console.log(`Full media object:`, data.media);
-      }
-
-      // Create header
-      const header = document.createElement("header");
-      const postData = document.createElement("div");
-      postData.classList.add("post_data");
-
-      // Mobile controls dropdown
-      const mobileControls = document.createElement("div");
-      mobileControls.classList.add("post_mobile_controls_collapse", "dropdown");
-      mobileControls.innerHTML = `
-        <button data-toggle="dropdown" class="btnr parent">
-            <i class="icon-th-list"></i>
-        </button>
-        <ul class="dropdown-menu" role="menu">
-            <li class="nav-header">Post</li>
-            <li><a href="#" data-post="${data.doc_id || ""}" data-post-id="${
-        data.num || data.no
-      }" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a></li>
-        </ul>
-    `;
-      postData.appendChild(mobileControls);
-
-      // Board indicator (show board like /int/)
-      const boardSpan = document.createElement("span");
-      boardSpan.classList.add("post_show_board");
-      boardSpan.textContent = `/${boardName}/`;
-      postData.appendChild(boardSpan);
-
-      // Title (usually empty)
-      const title = document.createElement("h2");
-      title.classList.add("post_title");
-      title.textContent = data.title || "";
-      postData.appendChild(title);
-
-      // Author info
-      const posterData = document.createElement("span");
-      posterData.classList.add("post_poster_data");
-
-      const author = document.createElement("span");
-      author.classList.add("post_author");
-      author.textContent = data.name || data.name_processed || "Anonymous";
-      posterData.appendChild(author);
-
-      const tripcode = document.createElement("span");
-      tripcode.classList.add("post_tripcode");
-      tripcode.textContent = data.trip || "";
-      posterData.appendChild(tripcode);
-
-      // Add poster ID if available
-      if (data.poster_hash || data.id) {
-        const posterId = document.createElement("span");
-        posterId.classList.add("poster_id");
-        posterId.style.cssText =
-          "background: #d6daf0; color: #000; padding: 0 4px; margin-left: 5px; font-weight: bold; border-radius: 2px;";
-        posterId.textContent = `ID: ${data.poster_hash || data.id}`;
-        posterData.appendChild(posterId);
-      }
-
-      postData.appendChild(posterData);
-
-      // Timestamp
-      if (data.timestamp || data.time) {
-        const timeWrap = document.createElement("span");
-        timeWrap.classList.add("time_wrap");
-
-        const timeElement = document.createElement("time");
-        const timestamp = parseInt(data.timestamp || data.time);
-        const date = new Date(timestamp * 1000);
-
-        if (!isNaN(date.getTime())) {
-          timeElement.setAttribute("datetime", date.toISOString());
-          timeElement.setAttribute(
-            "title",
-            `4chan Time: ${data.fourchan_date || date.toLocaleDateString()}`
-          );
-
-          // Format: "Wed 16 Jul 2025 04:51:37"
-          const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-          const months = [
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun",
-            "Jul",
-            "Aug",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dec",
-          ];
-
-          const dayName = days[date.getDay()];
-          const day = date.getDate().toString().padStart(2, "0");
-          const month = months[date.getMonth()];
-          const year = date.getFullYear();
-          const hours = date.getHours().toString().padStart(2, "0");
-          const minutes = date.getMinutes().toString().padStart(2, "0");
-          const seconds = date.getSeconds().toString().padStart(2, "0");
-
-          timeElement.textContent = `${dayName} ${day} ${month} ${year} ${hours}:${minutes}:${seconds}`;
-        }
-
-        timeWrap.appendChild(timeElement);
-        postData.appendChild(timeWrap);
-      }
-
-      // Get base URL for links (fixed for search pages)
-      const getBaseUrl = () => {
-        const currentUrl = document.URL;
-
-        if (currentUrl.includes("/_/search/")) {
-          const urlParts = currentUrl.split("/");
-          return `${urlParts[0]}//${urlParts[2]}`;
-        }
-
-        const domain = document.URL.split("/")[2];
-        const protocol = document.URL.split("/")[0];
-        return `${protocol}//${domain}`;
+      const extMap = {
+        webm: "video/webm",
+        mp4: "video/mp4",
+        m4v: "video/mp4",
+        mov: "video/quicktime",
+        avi: "video/x-msvideo",
+        mkv: "video/x-matroska",
+        ogv: "video/ogg",
       };
 
-      const baseUrl = getBaseUrl();
-      const postNum = data.num || data.no;
-      const threadNum = data.thread_num || data.resto || postNum;
-      const url = `${baseUrl}/${boardName}/thread/${threadNum}/#${postNum}`;
+      if (extMap[ext]) return extMap[ext];
+      for (const [e, mime] of Object.entries(extMap)) {
+        if (url.endsWith("." + e) || url.includes("." + e + "?")) return mime;
+      }
+      return "video/webm";
+    };
 
-      // Post number links
-      const postLink1 = document.createElement("a");
-      postLink1.href = url;
-      postLink1.setAttribute("data-post", postNum);
-      postLink1.setAttribute("data-function", "highlight");
-      postLink1.setAttribute("title", "Link to this post");
-      postLink1.textContent = "No.";
-      postData.appendChild(postLink1);
+    // ─── BUILD MEDIA URL CANDIDATES ───────────────────────
+    const buildMediaCandidates = () => {
+      const candidates = [];
 
-      const postLink2 = document.createElement("a");
-      postLink2.href = `${baseUrl}/${boardName}/thread/${threadNum}/#q${postNum}`;
-      postLink2.setAttribute("data-post", postNum);
-      postLink2.setAttribute("data-function", "quote");
-      postLink2.setAttribute("title", "Reply to this post");
-      postLink2.textContent = postNum;
-      postData.appendChild(postLink2);
+      if (isVideo) {
+        candidates.push(imageUrl);
+        if (imageUrl.includes("archive-media.palanq.win")) {
+          candidates.push(
+            imageUrl.replace("archive-media.palanq.win", "archive.palanq.win")
+          );
+        }
+        if (imageUrl.includes("arch-img.b4k.dev")) {
+          candidates.push(imageUrl.replace("arch-img.b4k.dev", "b4k.co/media"));
+        }
+        if (imageUrl.includes("is2.4chan.org")) {
+          candidates.push(imageUrl.replace("is2.4chan.org", "i.4cdn.org"));
+        }
+        if (imageUrl.includes("is.4chan.org")) {
+          candidates.push(imageUrl.replace("is.4chan.org", "i.4cdn.org"));
+        }
+      } else {
+        // ① Prefer full image first
+        if (MEDIA_CONFIG.preferFullImage) {
+          candidates.push(imageUrl);
+          if (data.media.media_thumb) {
+            candidates.push(data.media.media_thumb);
+          }
+          const derived = deriveThumb(imageUrl);
+          if (derived) candidates.push(derived);
+        } else {
+          if (data.media.media_thumb) {
+            candidates.push(data.media.media_thumb);
+          }
+          const derived = deriveThumb(imageUrl);
+          if (derived) candidates.push(derived);
+          candidates.push(imageUrl);
+        }
 
-      // Post type (flags, etc.)
-      const postType = document.createElement("span");
-      postType.classList.add("post_type");
-
-      // Add country flag exactly like desuarchive
-      if (data.poster_country) {
-        const countryCode = data.poster_country.toLowerCase(); // "br"
-        const countryName =
-          data.poster_country_name ||
-          data.poster_country_name_processed ||
-          data.poster_country.toUpperCase();
-
-        const countryFlag = document.createElement("span");
-        countryFlag.title = countryName; // "Brazil"
-        countryFlag.classList.add("flag", `flag-${countryCode}`); // "flag flag-br"
-
-        postType.appendChild(countryFlag);
+        if (imageUrl.includes("arch-img.b4k.dev")) {
+          candidates.push(imageUrl.replace("arch-img.b4k.dev", "b4k.co/media"));
+        }
+        if (imageUrl.includes("archive-media.palanq.win")) {
+          candidates.push(
+            imageUrl
+              .replace("archive-media.palanq.win", "archive.palanq.win")
+              .replace("/thumb/", "/image/")
+          );
+        }
+        if (imageUrl.includes("is2.4chan.org")) {
+          candidates.push(imageUrl.replace("is2.4chan.org", "i.4cdn.org"));
+        }
+        if (imageUrl.includes("is.4chan.org")) {
+          candidates.push(imageUrl.replace("is.4chan.org", "i.4cdn.org"));
+        }
       }
 
-      postData.appendChild(postType);
+      return [...new Set(candidates.filter(Boolean))];
+    };
 
-      // Mobile view
-      const mobileView = document.createElement("span");
-      mobileView.classList.add("mobile_view");
-      mobileView.innerHTML = `<a href="${url}" class="btnr parent">View</a>`;
-      postData.appendChild(mobileView);
+    const mediaCandidates = buildMediaCandidates();
 
-      // Mobile bulk
-      const mobileBulk = document.createElement("span");
-      mobileBulk.classList.add("mobile_bulk");
-      postData.appendChild(mobileBulk);
-      // Post controls
-      const postControls = document.createElement("span");
-      postControls.classList.add("post_controls");
-      postControls.innerHTML = `
-            <a href="${url}" class="btnr parent">View</a>
-            <a href="#" class="btnr parent" data-post="${
-              data.doc_id || ""
-            }" data-post-id="${postNum}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a>
+    // ─── IMAGE HASH ───────────────────────────────────────
+    const imageHash =
+      data.media.media_hash ||
+      data.media.safe_media_hash ||
+      data.media_hash ||
+      data.safe_media_hash ||
+      data.media.media_id ||
+      extractHashFromUrl(imageUrl) ||
+      null;
+
+    const baseUrl = (() => {
+      const currentUrl = document.URL;
+      if (currentUrl.includes("/_/search/")) {
+        const urlParts = currentUrl.split("/");
+        return `${urlParts[0]}//${urlParts[2]}`;
+      }
+      const domain = document.URL.split("/")[2];
+      const protocol = document.URL.split("/")[0];
+      return `${protocol}//${domain}`;
+    })();
+
+    const viewSameUrl = imageHash
+      ? `${baseUrl}/_/search/image/${imageHash}/`
+      : imageUrl;
+
+    // ─── FILE INFO BAR ────────────────────────────────────
+    postFile.innerHTML = `
+        <span class="post_file_controls">
+            <a href="${viewSameUrl}" target="_blank" rel="noopener" class="btnr parent" title="Find other posts with this ${
+      isVideo ? "video" : "image"
+    }">View Same</a>
+            <a href="https://lens.google.com/uploadbyurl?url=${encodedImageUrl};text:google" target="_blank" rel="noopener" class="btnr parent">Google</a>
+            <a href="https://imgops.com/${imageUrl}" target="_blank" rel="noopener" class="btnr parent">ImgOps</a>
+            <a href="https://iqdb.org/?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">iqdb</a>
+            <a href="https://saucenao.com/search.php?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">SauceNAO</a>
+            <a href="${imageUrl}" download="${filename}" class="btnr parent">
+                <i class="icon-download-alt"></i>
+            </a>
+        </span>
+        <a href="${imageUrl}" class="post_file_filename" rel="tooltip" title="${filename}">${filename}</a>,
+        <span class="post_file_metadata">${filesize}${
+      dimensions ? ", " + dimensions : ""
+    }${isVideo ? " (video)" : ""}</span>
+    `;
+
+    postWrapper.appendChild(postFile);
+
+    // ─── MEDIA BOX ────────────────────────────────────────
+    const imageBox = document.createElement("div");
+    imageBox.classList.add("thread_image_box");
+    imageBox.style.display = "block";
+
+    if (isVideo) {
+      // ═══════════════════════════════════════════════════
+      // VIDEO RENDERING
+      // ═══════════════════════════════════════════════════
+      const videoType = getVideoType();
+
+      const video = document.createElement("video");
+      video.setAttribute("name", "media");
+      video.setAttribute("loop", "");
+      video.classList.add("bigImage", "fullVideo");
+      video.preload = "metadata";
+      video.playsInline = true;
+      video.removeAttribute("controls"); // custom controls
+      video.style.maxWidth = "100%";
+      video.style.height = "auto";
+      video.style.cursor = "pointer";
+      video.style.display = "block";
+
+      const videoWrap = document.createElement("div");
+      videoWrap.classList.add("video-wrap");
+      videoWrap.style.position = "relative";
+      videoWrap.style.display = "inline-block";
+      videoWrap.style.maxWidth = "100%";
+video.src = "";
+
+      // ─── CUSTOM CONTROLS BAR ──────────────────────────
+      const controlsBar = document.createElement("div");
+      controlsBar.classList.add("video-controls-bar");
+      controlsBar.style.cssText = `
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 40px;
+        background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0));
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+        color: #fff;
+        font-size: 12px;
+        box-sizing: border-box;
+      `;
+
+      const playBtn = document.createElement("button");
+      playBtn.innerHTML = "▶";
+      playBtn.style.cssText =
+        "background:none;border:none;color:#fff;cursor:pointer;font-size:14px;padding:4px 8px;";
+      playBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (video.paused) video.play().catch(() => {});
+        else video.pause();
+      });
+
+      const progress = document.createElement("input");
+      progress.type = "range";
+      progress.min = "0";
+      progress.max = "1000";
+      progress.value = "0";
+      progress.style.cssText =
+        "flex:1;cursor:pointer;height:4px;accent-color:#fff;";
+      progress.addEventListener("input", (e) => {
+        e.stopPropagation();
+        if (video.duration) {
+          video.currentTime = (progress.value / 1000) * video.duration;
+        }
+      });
+
+      const timeDisplay = document.createElement("span");
+      timeDisplay.textContent = "0:00";
+      timeDisplay.style.cssText =
+        "font-variant-numeric: tabular-nums; min-width: 36px;";
+
+      const volume = document.createElement("input");
+      volume.type = "range";
+      volume.min = "0";
+      volume.max = "1";
+      volume.step = "0.05";
+      volume.value = "1";
+      volume.style.cssText = "width:60px;cursor:pointer;accent-color:#fff;";
+      volume.addEventListener("input", (e) => {
+        e.stopPropagation();
+        video.volume = parseFloat(volume.value);
+      });
+
+      const fsBtn = document.createElement("button");
+      fsBtn.innerHTML = "⛶";
+      fsBtn.style.cssText =
+        "background:none;border:none;color:#fff;cursor:pointer;font-size:14px;padding:4px 8px;";
+      fsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (video.requestFullscreen) video.requestFullscreen();
+        else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
+      });
+
+      controlsBar.append(playBtn, progress, timeDisplay, volume, fsBtn);
+      videoWrap.appendChild(video);
+      videoWrap.appendChild(controlsBar);
+
+      // Update state
+      video.addEventListener("timeupdate", () => {
+        if (video.duration) {
+          progress.value = String(
+            Math.floor((video.currentTime / video.duration) * 1000)
+          );
+        }
+        timeDisplay.textContent = fmtTime(video.currentTime);
+      });
+
+      video.addEventListener("play", () => (playBtn.innerHTML = "⏸"));
+      video.addEventListener("pause", () => (playBtn.innerHTML = "▶"));
+
+      // ─── HOVER BEHAVIOR ────────────────────────────────
+      const BOTTOM_ZONE = 60; // px from bottom triggers controls
+
+      videoWrap.addEventListener("mouseenter", () => {
+        if (MEDIA_CONFIG.videoHoverAutoplay && video.src) {
+          video.play().catch(() => {});
+        }
+      });
+
+      videoWrap.addEventListener("mouseleave", () => {
+        if (MEDIA_CONFIG.videoHoverAutoplay) {
+          video.pause();
+        }
+        controlsBar.style.opacity = "0";
+        controlsBar.style.pointerEvents = "none";
+      });
+
+      videoWrap.addEventListener("mousemove", (e) => {
+        const rect = videoWrap.getBoundingClientRect();
+        const distanceFromBottom = rect.bottom - e.clientY;
+
+        if (distanceFromBottom <= BOTTOM_ZONE) {
+          controlsBar.style.opacity = "1";
+          controlsBar.style.pointerEvents = "auto";
+        } else {
+          controlsBar.style.opacity = "0";
+          controlsBar.style.pointerEvents = "none";
+        }
+      });
+
+      // ─── LAZY LOAD VIA QUEUE ───────────────────────────
+      let videoLoaded = false;
+      let videoCandidateIndex = 0;
+const tryNextVideoCandidate = () => {
+  videoCandidateIndex++;
+  if (videoCandidateIndex < mediaCandidates.length) {
+    const nextSrc = mediaCandidates[videoCandidateIndex];
+    console.log(
+      `[video fallback] ${videoCandidateIndex}/${mediaCandidates.length - 1}: ${nextSrc}`
+    );
+    video.src = nextSrc;   // ✅ direct assignment
+    video.load();
+    return true;
+  }
+  return false;
+};
+
+      video.addEventListener("error", () => {
+        console.warn("Video failed to load:", source.src);
+        if (!tryNextVideoCandidate()) {
+          video.style.display = "none";
+          const fallbackDiv = document.createElement("div");
+          fallbackDiv.classList.add("video-fallback");
+          fallbackDiv.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 300px;
+            height: 180px;
+            background: #2a2a2a;
+            border: 1px dashed #555;
+            border-radius: 4px;
+            color: #888;
+            font-size: 12px;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            cursor: pointer;
+          `;
+          fallbackDiv.innerHTML = `
+            <i class="icon-film" style="font-size: 24px; margin-bottom: 6px;"></i>
+            <span>Video unavailable</span>
+            <span style="font-size: 10px; margin-top: 4px; color: #666;">${filename}</span>
+          `;
+          fallbackDiv.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(imageUrl, "_blank", "noopener");
+          });
+          videoWrap.appendChild(fallbackDiv);
+        }
+      });
+videoWrap._onEnterView = () => {
+  if (videoLoaded) return;
+  videoLoaded = true;
+  enqueueVideoLoad(
+    () =>
+      new Promise((resolve) => {
+        video.src = mediaCandidates[0];  // ✅ now video.src is real
+        video.load();
+        const done = () => {
+          video.removeEventListener("loadedmetadata", done);
+          video.removeEventListener("error", done);
+          resolve();
+        };
+        video.addEventListener("loadedmetadata", done);
+        video.addEventListener("error", done);
+        setTimeout(done, 5000);
+      })
+  );
+};
+      mediaViewObserver.observe(videoWrap);
+
+      // Click = play/pause
+      video.addEventListener("click", (e) => {
+        if (e.target === video) {
+          if (video.paused) video.play().catch(() => {});
+          else video.pause();
+        }
+      });
+
+      imageBox.appendChild(videoWrap);
+      postWrapper.appendChild(imageBox);
+
+      console.log(`Video URL:`, imageUrl);
+      console.log(`Video candidates:`, mediaCandidates);
+      console.log(`Video type:`, videoType);
+    } else {
+      // ═══════════════════════════════════════════════════
+      // IMAGE RENDERING (thumb-first, then full on view)
+      // ═══════════════════════════════════════════════════
+      const imageLink = document.createElement("a");
+      imageLink.href = "#";
+      imageLink.classList.add("thread_image_link");
+
+      const imageElement = document.createElement("img");
+      imageElement.classList.add("post_image");
+      imageElement.loading = "lazy";
+      imageElement.alt = filename;
+
+      // Select initial (thumb) and full src
+      const fullSrc = imageUrl;
+      const thumbSrc =
+        data.media.media_thumb || deriveThumb(imageUrl) || imageUrl;
+
+      imageElement.src = MEDIA_CONFIG.thumbFirst ? thumbSrc : fullSrc;
+      imageElement.dataset.fullSrc = fullSrc;
+      imageElement.dataset.thumbSrc = thumbSrc;
+
+      let showingFull = !MEDIA_CONFIG.thumbFirst;
+      let candidateIndex = 0;
+
+      const tryNextCandidate = () => {
+        candidateIndex++;
+        if (candidateIndex < mediaCandidates.length) {
+          const nextSrc = mediaCandidates[candidateIndex];
+          console.log(
+            `[img fallback] ${candidateIndex}/${mediaCandidates.length - 1}: ${nextSrc}`
+          );
+          imageElement.src = nextSrc;
+          return true;
+        }
+        return false;
+      };
+
+      imageElement.onerror = function () {
+        console.warn("Image failed to load:", this.src);
+        if (tryNextCandidate()) return;
+
+        this.style.display = "none";
+        const fallbackDiv = document.createElement("div");
+        fallbackDiv.classList.add("image-fallback");
+        fallbackDiv.style.cssText = `
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 200px;
+          height: 120px;
+          background: #2a2a2a;
+          border: 1px dashed #555;
+          border-radius: 4px;
+          color: #888;
+          font-size: 12px;
+          padding: 10px;
+          box-sizing: border-box;
+          text-align: center;
+          cursor: pointer;
         `;
+        fallbackDiv.innerHTML = `
+          <i class="icon-picture" style="font-size: 24px; margin-bottom: 6px;"></i>
+          <span>Image unavailable</span>
+          <span style="font-size: 10px; margin-top: 4px; color: #666;">${filename}</span>
+        `;
+        fallbackDiv.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(imageUrl, "_blank", "noopener");
+        });
+        imageLink.appendChild(fallbackDiv);
+      };
 
-      // Add "Expand All" button if post has replies
-      if (data.replies && data.replies > 0) {
-        postControls.innerHTML += `<a href="#" class="btnr parent expand-all-btn">Expand All (${data.replies})</a>`;
+      // ─── LAZY UPGRADE: thumb → full when in viewport ───
+      if (MEDIA_CONFIG.thumbFirst && MEDIA_CONFIG.lazyLoadFullOnView) {
+        imageLink._onEnterView = () => {
+          if (showingFull) return;
+          const full = imageElement.dataset.fullSrc;
+          if (full && full !== imageElement.src) {
+            const preload = new Image();
+            preload.onload = () => {
+              imageElement.src = full;
+              showingFull = true;
+            };
+            preload.onerror = () => {
+              console.log("[img] full failed, keeping thumb:", full);
+            };
+            preload.src = full;
+          }
+        };
+        mediaViewObserver.observe(imageLink);
       }
 
-      postData.appendChild(postControls);
+      // ─── SIZE / EXPAND ─────────────────────────────────
+      const thumbW = data.media.media_tw || data.media.media_w;
+      const thumbH = data.media.media_th || data.media.media_h;
 
-      // Add OP button if this is the original post
-      if (data.op === "1" || data.resto === 0 || data.resto === null) {
-        const opButton = document.createElement("button");
-        opButton.classList.add("OP-button");
-        opButton.style.cssText =
-          "height: 24px; border-radius: 50%; color: white; background: rgb(34, 0, 68); margin-left: 5px;";
-        opButton.textContent = "OP";
-        postData.appendChild(opButton);
-      }
+      let isExpanded = false;
+      const originalMaxWidth = thumbW ? Math.min(thumbW, 250) : 250;
+      const originalMaxHeight = thumbH ? Math.min(thumbH, 250) : 250;
 
-      header.appendChild(postData);
-      postWrapper.appendChild(header);
+      imageElement.style.maxWidth = originalMaxWidth + "px";
+      imageElement.style.maxHeight = originalMaxHeight + "px";
+      imageElement.style.cursor = "pointer";
+      imageElement.style.transition = "all 0.3s ease";
 
-      // Backlink list (quoted by)
-      const backlinkList = document.createElement("div");
-      backlinkList.classList.add("backlink_list");
-      backlinkList.innerHTML = `Quoted By: <span class="post_backlink" data-post="${postNum}" id="p_b${postNum}"></span>`;
-      postWrapper.appendChild(backlinkList);
+      const toggleImageSize = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-      // Post content
-      const textDiv = document.createElement("div");
-      textDiv.classList.add("text");
-      const content =
-        data.comment_processed || data.com || data.comment || data.content || "";
-      textDiv.innerHTML = content;
-      postWrapper.appendChild(textDiv);
+        if (isExpanded) {
+          imageElement.style.maxWidth = originalMaxWidth + "px";
+          imageElement.style.maxHeight = originalMaxHeight + "px";
+          imageElement.style.width = "auto";
+          imageElement.style.height = "auto";
+          imageElement.style.position = "static";
+          imageElement.style.zIndex = "auto";
+          imageElement.style.boxShadow = "none";
+          imageElement.title = "Click to expand";
+          isExpanded = false;
+        } else {
+          if (!showingFull) {
+            const full = imageElement.dataset.fullSrc;
+            if (full && full !== imageElement.src) {
+              imageElement.src = full;
+              showingFull = true;
+            }
+          }
+          imageElement.style.maxWidth = "100%";
+          imageElement.style.maxHeight = "100%";
+          imageElement.style.width = "auto";
+          imageElement.style.height = "auto";
+          imageElement.style.position = "relative";
+          imageElement.style.zIndex = "1000";
+          imageElement.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+          imageElement.title = "Click to collapse";
+          isExpanded = true;
+        }
+      };
 
-      // Add backlinks section (replies to this post) if they exist
-      if (data.quoted_by && data.quoted_by.length > 0) {
-        const backlinksDiv = document.createElement("div");
-        backlinksDiv.classList.add("backlinks");
-        backlinksDiv.style.cssText = "font-size: 0.7rem; padding: 2px;";
+      imageElement.addEventListener("click", toggleImageSize);
+      imageLink.addEventListener("click", toggleImageSize);
 
-        const backlinksHTML = data.quoted_by
-          .map(
-            (replyId) =>
-              `<a href="${baseUrl}/${boardName}/thread/${threadNum}/#${replyId}" class="backlink inlined" data-function="highlight" data-backlink="true" data-board="${boardName}" data-post="${replyId}" style="color: rgb(174, 148, 112);">&gt;&gt;${replyId}</a>`
-          )
-          .join(" ");
+      imageElement.addEventListener("mouseenter", () => {
+        if (!isExpanded) {
+          imageElement.style.opacity = "0.8";
+          imageElement.title = "Click to expand to full size";
+        }
+      });
 
-        backlinksDiv.innerHTML = `Quoted By: ${backlinksHTML}`;
-        postWrapper.appendChild(backlinksDiv);
-      }
+      imageElement.addEventListener("mouseleave", () => {
+        if (!isExpanded) {
+          imageElement.style.opacity = "1";
+        }
+      });
 
-      postElement.appendChild(postWrapper);
+      imageLink.appendChild(imageElement);
+      imageBox.appendChild(imageLink);
+      postWrapper.appendChild(imageBox);
 
-      return postElement;
+      console.log(`Image hash for ${filename}:`, imageHash);
+      console.log(`Candidates (${mediaCandidates.length}):`, mediaCandidates);
+      console.log(`Initial src:`, imageElement.src);
+      console.log(`Full src:`, fullSrc);
     }
+  }
+
+  // ─── HEADER ─────────────────────────────────────────────
+  const header = document.createElement("header");
+  const postData = document.createElement("div");
+  postData.classList.add("post_data");
+
+  const mobileControls = document.createElement("div");
+  mobileControls.classList.add("post_mobile_controls_collapse", "dropdown");
+  mobileControls.innerHTML = `
+    <button data-toggle="dropdown" class="btnr parent">
+        <i class="icon-th-list"></i>
+    </button>
+    <ul class="dropdown-menu" role="menu">
+        <li class="nav-header">Post</li>
+        <li><a href="#" data-post="${data.doc_id || ""}" data-post-id="${
+    data.num || data.no
+  }" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a></li>
+    </ul>
+`;
+  postData.appendChild(mobileControls);
+
+  const boardSpan = document.createElement("span");
+  boardSpan.classList.add("post_show_board");
+  boardSpan.textContent = `/${boardName}/`;
+  postData.appendChild(boardSpan);
+
+  const title = document.createElement("h2");
+  title.classList.add("post_title");
+  title.textContent = data.title || "";
+  postData.appendChild(title);
+
+  const posterData = document.createElement("span");
+  posterData.classList.add("post_poster_data");
+
+  const author = document.createElement("span");
+  author.classList.add("post_author");
+  author.textContent = data.name || data.name_processed || "Anonymous";
+  posterData.appendChild(author);
+
+  const tripcode = document.createElement("span");
+  tripcode.classList.add("post_tripcode");
+  tripcode.textContent = data.trip || "";
+  posterData.appendChild(tripcode);
+
+  if (data.poster_hash || data.id) {
+    const posterId = document.createElement("span");
+    posterId.classList.add("poster_id");
+    posterId.style.cssText =
+      "background: #d6daf0; color: #000; padding: 0 4px; margin-left: 5px; font-weight: bold; border-radius: 2px;";
+    posterId.textContent = `ID: ${data.poster_hash || data.id}`;
+    posterData.appendChild(posterId);
+  }
+
+  postData.appendChild(posterData);
+
+  if (data.timestamp || data.time) {
+    const timeWrap = document.createElement("span");
+    timeWrap.classList.add("time_wrap");
+
+    const timeElement = document.createElement("time");
+    const timestamp = parseInt(data.timestamp || data.time);
+    const date = new Date(timestamp * 1000);
+
+    if (!isNaN(date.getTime())) {
+      timeElement.setAttribute("datetime", date.toISOString());
+      timeElement.setAttribute(
+        "title",
+        `4chan Time: ${data.fourchan_date || date.toLocaleDateString()}`
+      );
+
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      ];
+
+      const dayName = days[date.getDay()];
+      const day = date.getDate().toString().padStart(2, "0");
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      const hours = date.getHours().toString().padStart(2, "0");
+      const minutes = date.getMinutes().toString().padStart(2, "0");
+      const seconds = date.getSeconds().toString().padStart(2, "0");
+
+      timeElement.textContent = `${dayName} ${day} ${month} ${year} ${hours}:${minutes}:${seconds}`;
+    }
+
+    timeWrap.appendChild(timeElement);
+    postData.appendChild(timeWrap);
+  }
+
+  const getBaseUrl = () => {
+    const currentUrl = document.URL;
+    if (currentUrl.includes("/_/search/")) {
+      const urlParts = currentUrl.split("/");
+      return `${urlParts[0]}//${urlParts[2]}`;
+    }
+    const domain = document.URL.split("/")[2];
+    const protocol = document.URL.split("/")[0];
+    return `${protocol}//${domain}`;
+  };
+
+  const baseUrl = getBaseUrl();
+  const postNum = data.num || data.no;
+  const threadNum = data.thread_num || data.resto || postNum;
+  const url = `${baseUrl}/${boardName}/thread/${threadNum}/#${postNum}`;
+
+  const postLink1 = document.createElement("a");
+  postLink1.href = url;
+  postLink1.setAttribute("data-post", postNum);
+  postLink1.setAttribute("data-function", "highlight");
+  postLink1.setAttribute("title", "Link to this post");
+  postLink1.textContent = "No.";
+  postData.appendChild(postLink1);
+
+  const postLink2 = document.createElement("a");
+  postLink2.href = `${baseUrl}/${boardName}/thread/${threadNum}/#q${postNum}`;
+  postLink2.setAttribute("data-post", postNum);
+  postLink2.setAttribute("data-function", "quote");
+  postLink2.setAttribute("title", "Reply to this post");
+  postLink2.textContent = postNum;
+  postData.appendChild(postLink2);
+
+  const postType = document.createElement("span");
+  postType.classList.add("post_type");
+
+  if (data.poster_country) {
+    const countryCode = data.poster_country.toLowerCase();
+    const countryName =
+      data.poster_country_name ||
+      data.poster_country_name_processed ||
+      data.poster_country.toUpperCase();
+
+    const countryFlag = document.createElement("span");
+    countryFlag.title = countryName;
+    countryFlag.classList.add("flag", `flag-${countryCode}`);
+
+    postType.appendChild(countryFlag);
+  }
+
+  postData.appendChild(postType);
+
+  const mobileView = document.createElement("span");
+  mobileView.classList.add("mobile_view");
+  mobileView.innerHTML = `<a href="${url}" class="btnr parent">View</a>`;
+  postData.appendChild(mobileView);
+
+  const mobileBulk = document.createElement("span");
+  mobileBulk.classList.add("mobile_bulk");
+  postData.appendChild(mobileBulk);
+
+  const postControls = document.createElement("span");
+  postControls.classList.add("post_controls");
+  postControls.innerHTML = `
+        <a href="${url}" class="btnr parent">View</a>
+        <a href="#" class="btnr parent" data-post="${
+          data.doc_id || ""
+        }" data-post-id="${postNum}" data-board="${boardName}" data-controls-modal="post_tools_modal" data-backdrop="true" data-keyboard="true" data-function="report">Report</a>
+    `;
+
+  if (data.replies && data.replies > 0) {
+    postControls.innerHTML += `<a href="#" class="btnr parent expand-all-btn">Expand All (${data.replies})</a>`;
+  }
+
+  postData.appendChild(postControls);
+
+  if (data.op === "1" || data.resto === 0 || data.resto === null) {
+    const opButton = document.createElement("button");
+    opButton.classList.add("OP-button");
+    opButton.style.cssText =
+      "height: 24px; border-radius: 50%; color: white; background: rgb(34, 0, 68); margin-left: 5px;";
+    opButton.textContent = "OP";
+    postData.appendChild(opButton);
+  }
+
+  header.appendChild(postData);
+  postWrapper.appendChild(header);
+
+  const backlinkList = document.createElement("div");
+  backlinkList.classList.add("backlink_list");
+  backlinkList.innerHTML = `Quoted By: <span class="post_backlink" data-post="${postNum}" id="p_b${postNum}"></span>`;
+  postWrapper.appendChild(backlinkList);
+
+  const textDiv = document.createElement("div");
+  textDiv.classList.add("text");
+  const content =
+    data.comment_processed || data.com || data.comment || data.content || "";
+  textDiv.innerHTML = content;
+  postWrapper.appendChild(textDiv);
+
+  if (data.quoted_by && data.quoted_by.length > 0) {
+    const backlinksDiv = document.createElement("div");
+    backlinksDiv.classList.add("backlinks");
+    backlinksDiv.style.cssText = "font-size: 0.7rem; padding: 2px;";
+
+    const backlinksHTML = data.quoted_by
+      .map(
+        (replyId) =>
+          `<a href="${baseUrl}/${boardName}/thread/${threadNum}/#${replyId}" class="backlink inlined" data-function="highlight" data-backlink="true" data-board="${boardName}" data-post="${replyId}" style="color: rgb(174, 148, 112);">&gt;&gt;${replyId}</a>`
+      )
+      .join(" ");
+
+    backlinksDiv.innerHTML = `Quoted By: ${backlinksHTML}`;
+    postWrapper.appendChild(backlinksDiv);
+  }
+
+  postElement.appendChild(postWrapper);
+
+  return postElement;
+}
     async function processNextBacklink() {
       if (index >= backlinks.length) {
         console.log("All backlinks processed");
@@ -3343,10 +3785,8 @@ const getMainThread = () => {
         '<input type="text" class="post-id-input" placeholder="Post ID" style="width: 16px; margin-left: 5px; font-size: 12px;" />'
       );
       $input.val("3");
-      $input.on("keydown", function (e) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const postCount = $input.val().trim();
+      let inpF = () => {
+        const postCount = $input.val().trim();
           if (postCount && !isNaN(postCount)) {
             const $btn = $expandBtn;
             const $replies = $post.find(".backlinks .backlink");
@@ -3370,10 +3810,20 @@ const getMainThread = () => {
               $link.css({ backgroundColor: "#447744" });
             });
             if (replies.length > 0) {
+              post.clone(true).prependTo(post)
               expandAllQuotes(post, false, true, false, replies);
             }
           }
         }
+      $input.on("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          inpF()
+        }
+      });
+      $input.on("dblclick", function (e) {
+          e.preventDefault();
+          inpF()
       });
       $postControls.append($expandBtn);
       $postControls.append($expandBtn2);
@@ -4119,7 +4569,7 @@ if (e.key === "h" || e.key === "H") {
           img.click()
   })
       }
-    if (e.shiftKey && e.key === "M") {
+    if (e.shiftKey && e.key === "A") {
         let u=document.URL
         let i=document.URL.search(/\.\w+\/\w+/)
         let sl = u.slice(i)
@@ -4136,7 +4586,7 @@ if (e.key === "h" || e.key === "H") {
           }, i * 1000); // Stagger by 1 second each
         });
       }
-    if(e.key == "F" || e.key == "F"){
+    if(e.key == "f" || e.key == "F"){
       wait = jitters(1.5, 0.5)
          if (delayPromise && delayPromise.cancel) {
             delayPromise.cancel();
