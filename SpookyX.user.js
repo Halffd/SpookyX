@@ -905,6 +905,109 @@
     wait += jitters()
     console.log(wait, baseWait, 'ms')
 
+    /**
+ * Creates an asynchronous dialog with a text input and a checkbox.
+ * @param {string} message - The message prompt.
+ * @param {string} placeholder - Placeholder text for the input field.
+ * @param {string} cbLabel - Text for the checkbox label.
+ * @returns {Promise<Object|null>} - Resolves to { text: string, checked: boolean } on confirm, or null on cancel.
+ */
+function dialog(message, placeholder = "Enter text...", cbLabel = "Check me") {
+  return new Promise((resolve) => {
+    // 1. Create the <dialog> element
+    const dialog = document.createElement('dialog');
+    dialog.style.padding = '20px';
+    dialog.style.borderRadius = '8px';
+    dialog.style.border = '1px solid #ccc';
+    dialog.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+    dialog.style.fontFamily = 'sans-serif';
+    dialog.style.minWidth = '950px';
+    dialog.style.fontSize = "40px"
+
+    // 2. Add the message text
+    const text = document.createElement('p');
+    text.textContent = message;
+    text.style.marginTop = '0';
+    dialog.appendChild(text);
+
+    // 3. Create the Text Input
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.placeholder = placeholder;
+    textInput.style.display = 'block';
+    textInput.style.width = '100%';
+    textInput.style.boxSizing = 'border-box';
+    textInput.style.marginBottom = '15px';
+    textInput.style.padding = '5px';
+    dialog.appendChild(textInput);
+
+    // 4. Create the Checkbox & Label
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '8px';
+    label.style.cursor = 'pointer';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(cbLabel));
+    dialog.appendChild(label);
+
+    // 5. Create Button Container
+    const btnContainer = document.createElement('div');
+    btnContainer.style.display = 'flex';
+    btnContainer.style.gap = '10px';
+    btnContainer.style.justifyContent = 'flex-end';
+    btnContainer.style.marginTop = '20px';
+
+    // 6. Create Buttons
+    const btnCancel = document.createElement('button');
+    btnCancel.textContent = 'Cancel';
+    btnCancel.style.padding = '5px 10px';
+    btnCancel.style.cursor = 'pointer';
+
+    const btnConfirm = document.createElement('button');
+    btnConfirm.textContent = 'Confirm';
+    btnConfirm.style.padding = '5px 10px';
+    btnConfirm.style.cursor = 'pointer';
+
+    btnContainer.appendChild(btnCancel);
+    btnContainer.appendChild(btnConfirm);
+    dialog.appendChild(btnContainer);
+
+    // Append to document
+    document.body.appendChild(dialog);
+
+    // 7. Cleanup Function
+    const cleanup = () => {
+      dialog.close();
+      document.body.removeChild(dialog);
+    };
+
+    // 8. Event Listeners
+    btnConfirm.addEventListener('click', () => {
+      cleanup();
+      // Resolve with the data from the inputs
+      resolve({
+        text: textInput.value,
+        checked: checkbox.checked
+      });
+    });
+
+    const handleCancel = () => {
+      cleanup();
+      resolve(null); // Return null to indicate cancellation
+    };
+
+    btnCancel.addEventListener('click', handleCancel);
+    dialog.addEventListener('cancel', handleCancel); // Handles the Escape key
+
+    // Open the modal
+    dialog.showModal();
+  });
+}
 // ============================================================
 // 1. CACHED VIEWPORT DIMENSIONS (avoid layout thrashing)
 // ============================================================
@@ -2076,7 +2179,7 @@ function delay(ms) {
         postFile.innerHTML = `
             <span class="post_file_controls">
                 <a href="${viewSameUrl}" target="_blank" rel="noopener" class="btnr parent" title="Find other posts with this image">View Same</a>
-                <a href="https://www.google.com/searchbyimage?image_url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">Google</a>
+                <a href="https://lens.google.com/uploadbyurl?url=${encodedImageUrl};text:google" target="_blank" rel="noopener" class="btnr parent">Google</a>
                 <a href="https://imgops.com/${imageUrl}" target="_blank" rel="noopener" class="btnr parent">ImgOps</a>
                 <a href="https://iqdb.org/?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">iqdb</a>
                 <a href="https://saucenao.com/search.php?url=${encodedImageUrl}" target="_blank" rel="noopener" class="btnr parent">SauceNAO</a>
@@ -3848,12 +3951,85 @@ $postContainer.css({
       }, 3000);
     }
 
+    // 1. Define this OUTSIDE your event listener so it persists between clicks
+let currentSearchDate = null;
 document.addEventListener("keydown", function (e) {
   // Skip if typing in input fields
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
     return;
   }
+  // Attach to 'window' to guarantee it remembers the date between keystrokes
+if (typeof window.currentSearchDate === 'undefined') {
+  window.currentSearchDate = null;
+}
 
+// Assume this is inside your document keydown listener...
+if (e.key === "h" || e.key === "H") {
+
+  let posts = [];
+
+  $(".time_wrap > time").each(function() {
+    let d = new Date($(this).attr("datetime") || $(this).text());
+    if (!isNaN(d.getTime())) {
+      posts.push({ element: this, date: d });
+    }
+  });
+
+  if (posts.length === 0) {
+    console.log("No valid date elements found.");
+    return;
+  }
+
+  posts.sort((a, b) => a.date - b.date);
+
+  let maxDate = posts[posts.length - 1].date;
+  let minDate = posts[0].date;
+
+  // 2. Handle the Base Date & Incrementing
+  if (!window.currentSearchDate) {
+    window.currentSearchDate = new Date(minDate);
+    // CRITICAL FIX: Reset to midnight so the time of the first post doesn't mess up the math
+    window.currentSearchDate.setHours(0, 0, 0, 0);
+  } else {
+    window.currentSearchDate.setDate(window.currentSearchDate.getDate() + 1);
+  }
+
+  // 3. Cap at Maximum Date
+  if (window.currentSearchDate > maxDate) {
+    console.log("Reached the end of the posts. Looping back to start.");
+    window.currentSearchDate = new Date(minDate);
+    window.currentSearchDate.setHours(0, 0, 0, 0);
+  }
+
+  // 4. Get the target hour
+  let userInput = e.shiftKey ? prompt("Enter target hour (0-23):", "11") : '11';
+
+  // If the user clicks "Cancel" on the prompt, abort the script
+  if (userInput === null) return;
+
+  let targetHour = parseInt(userInput, 10);
+  if (isNaN(targetHour)) targetHour = 11;
+
+  // 5. Find the matching post and focus
+  let found = false;
+
+  for (let i = 0; i < posts.length; i++) {
+    let loopDate = posts[i].date;
+
+    // Condition: Date is >= Midnight of our target day AND hour is >= targetHour
+    if (loopDate >= window.currentSearchDate && loopDate.getHours() >= targetHour) {
+
+      posts[i].element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      found = true;
+      console.log(`Scrolled to post from: ${loopDate}`);
+      break;
+    }
+  }
+
+  if (!found) {
+    console.log("No matching posts found for that date and hour.");
+  }
+}
   // TEXT ONLY FONT SIZE: - and = (no modifiers)
   if (e.key === "-" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault();
@@ -9259,7 +9435,101 @@ sortInlineDivsByTimestamp()
               "-ms-user-select": "none",
             });
             $this.after($button);
+            $button.on("dblclick", async function(e) {
+              e.preventDefault()
+              // Use $(this) to refer to the specific button clicked
+              let p = $(this).closest(".post");
+              let timeEl = p.find(".time_wrap > time");
+              let board = $(p).data("data-board") || "_";
+              let dl = await dialog("Search term", "...", "Week ago? default later")
+              let tit = dl.text || "stream|episode|subs"
+              // 1. Get the date string (preferably from a datetime attribute, fallback to text)
+              let dateString = timeEl.attr("datetime") || timeEl.text();
+              let originalDate = new Date(dateString);
 
+              // Guard clause in case the date is invalid
+              if (isNaN(originalDate.getTime())) {
+                console.error("Could not parse original date from:", dateString);
+                return;
+              }
+              const start = !e.shiftKey
+              const dir = e.ctrlKey || dl.checked
+              let offset = start ? 0 : 1
+              if(!dir){
+                 offset += 7
+              }  else {
+                offset -= 7
+              }
+              // 2. Create the future date (7 days later)
+              let targetDate = new Date(originalDate);
+              targetDate.setDate(targetDate.getDate() + offset);
+
+              // 3. Check time condition: After 2pm (14:00) OR before 5am (05:00)
+              let currentHour = originalDate.getHours();
+              const fixedHour = (currentHour >= 14 || currentHour < 5);
+
+              if (fixedHour) {
+                // Parse the local storage string (e.g., "11am") into a 24-hour integer
+                let storedHourStr = localStorage.getItem("fixedHour") || "11am";
+                let targetHour = parseInt(storedHourStr, 10);
+
+                // Convert 12-hour AM/PM format to 24-hour format
+                if (storedHourStr.toLowerCase().includes("pm") && targetHour !== 12) targetHour += 12;
+                if (storedHourStr.toLowerCase().includes("am") && targetHour === 12) targetHour = 0;
+
+                // Set the specific hour, overriding minutes/seconds
+                targetDate.setHours(targetHour, 0, 0, 0);
+              }
+
+              console.log("Original Date:", originalDate, " Target Date:", targetDate);
+              // Assuming targetDate is your Date object
+              let day = targetDate.getDate();
+              let month = targetDate.getMonth() + 1; // ⚠️ JavaScript months are 0-indexed (Jan = 0)
+              let year = targetDate.getFullYear();
+
+              // Pad the day and month with a leading zero if they are less than 10
+              let dd = day < 10 ? '0' + day : day;
+              let mm = month < 10 ? '0' + month : month;
+
+              // Combine them into your desired format
+              let formattedDate = `${dd}-${mm}-${year}`;
+              let url = ''
+              if(start){
+                url = `https://desuarchive.org/${board}/search/text/${tit}/order/asc/start/${formattedDate}`
+              } else {
+                url = `https://desuarchive.org/${board}/search/text/${tit}/end/${formattedDate}`
+              }
+              console.log(formattedDate, url); // Example output: "14-08-2026"
+              let newWin = window.open(url, "_blank");
+
+              // Wait for the new window to finish loading
+              newWin.addEventListener('DOMContentLoaded', function() {
+
+    // Or execute a function within the new window's context
+    let script = newWin.document.createElement("script");
+    script.textContent = `setTimeout(()=>{
+    // 4. Find and scroll to the correct element
+              let found = false;
+
+              $(".time_wrap > time").each(function() {
+                let loopDate = new Date($(this).attr("datetime") || $(this).text());
+
+                // Find the first post that is greater than or equal to our target date
+                if (!isNaN(loopDate.getTime()) && loopDate >= new Date(${targetDate})) {
+                  this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  found = true;
+                  return false; // Break the jQuery .each() loop since we found it
+                }
+              });
+
+              if (!found) {
+                console.log("No matching posts found after that date.");
+              }
+  }, 1500)
+`;
+    newWin.document.body.appendChild(script);
+});
+            });
             $button.click(async function () {
               console.log("OP button clicked");
 
@@ -9453,7 +9723,7 @@ sortInlineDivsByTimestamp()
           }
         }
       }
-      if (settings.UserSettings.fetching.value) {
+      if (settings.UserSettings.fetching.value && !url.split("/")[2].includes("4plebs")) {
         async function processPosts() {
           if (settings.UserSettings.fetching.value) {
             if (search) {
